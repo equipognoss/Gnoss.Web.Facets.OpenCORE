@@ -1,0 +1,38 @@
+﻿@model FacetItemModel
+@if (Model != null)
+{   
+    <li>
+        @{
+    string clase = "";
+    if (Model.Name != "")
+    {
+        clase = "faceta";
+    }
+    if (Model.Selected)
+    {
+        clase += " applied";
+    }
+        }
+        @if (Model.FacetItemlist != null && Model.FacetItemlist.Count > 0)
+        {
+            if (Model.Selected)
+            {
+            <img class="imgMas" onclick="DesplegarImgMas(this, 'cat_@Model.Tittle')" alt="-" src="@ViewBag.BaseUrlStatic/img/verMenos.gif"/>
+            }
+            else
+            {
+            <img class="imgMas" onclick="DesplegarImgMas(this, 'cat_@Model.Tittle')" alt="+" src="@ViewBag.BaseUrlStatic/img/verMas.gif"/>
+            }
+        }
+        <a rel="nofollow" href="@Model.Filter" class="@clase" name="@Model.Name" title="@Model.Tittle">@Model.Tittle @(Model.Number >= 0?"(" + Model.Number + ")":"")</a>
+    </li>
+        if (Model.FacetItemlist != null && Model.FacetItemlist.Count > 0)
+        {
+    <ul @Html.Raw(!Model.Selected ? "style=\"display: none\"" : "") id="cat_@Model.Tittle">
+        @foreach (FacetItemModel item in Model.FacetItemlist)
+        {
+            @Html.PartialView("_ItemFaceta", item)
+        }
+    </ul>
+        }
+}

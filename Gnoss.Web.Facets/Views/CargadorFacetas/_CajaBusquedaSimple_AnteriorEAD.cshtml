@@ -1,0 +1,37 @@
+﻿@model FacetModel
+@{
+    string butId = Model.Key+ "fbotonBuscar";
+    string facetaIDf = Model.Key + "f";
+}
+<div class="facetedSearchBox">    
+    @{
+        string claveFacetaSinObjetoConocimiento = Model.FacetKey;
+        if (claveFacetaSinObjetoConocimiento.Contains(";"))
+        {
+            claveFacetaSinObjetoConocimiento = claveFacetaSinObjetoConocimiento.Substring(claveFacetaSinObjetoConocimiento.IndexOf(";") + 1);
+        }
+    }
+
+    @if (Model.AutocompleteTypeSearchBox.Equals(AutocompleteTypeSearchBox.AutocompleteUser))
+    {
+        <input title="@Model.Name" type="text" name="@Model.FacetKey" class="filtroFaceta ac_input" id="@facetaIDf"
+            onfocus="autocompletarUsuario(this, '@claveFacetaSinObjetoConocimiento', '@Model.Order', '@ViewBag.Parametros', '@ViewBag.GrafoID');" />
+    }
+    else if (Model.AutocompleteTypeSearchBox.Equals(AutocompleteTypeSearchBox.AutocompleteTipedTags))
+    {
+        string languajeCode = ViewBag.UtilIdiomas.LanguageCode;
+        <input title="@Model.Name" type="text" name="@Model.FacetKey" class="filtroFaceta ac_input" id="@facetaIDf"
+            onfocus="autocompletarEtiquetasTipado(this, '@claveFacetaSinObjetoConocimiento', @Model.Multilanguage);" />
+    }
+    else if (Model.AutocompleteTypeSearchBox.Equals(AutocompleteTypeSearchBox.AutocompleteGeneric))
+    {
+        <input title="@Model.Name" type="text" name="@Model.FacetKey" class="filtroFaceta ac_input" id="@facetaIDf"
+            onfocus="autocompletarGenerico(this, '@claveFacetaSinObjetoConocimiento', '@Model.Order', '@ViewBag.Parametros');" />
+    }
+    else if (Model.AutocompleteTypeSearchBox.Equals(AutocompleteTypeSearchBox.AutocompleteGenericWithContextFilter))
+    {
+        <input title="@Model.Name" type="text" name="@Model.FacetKey" class="filtroFaceta ac_input" id="@facetaIDf"
+            onfocus="autocompletarGenericoConFiltroContexto(this, '@claveFacetaSinObjetoConocimiento', '@Model.Order', '@ViewBag.Parametros', '@ViewBag.FiltroContextoWhere');" />
+    }
+    <a name="@Model.FacetKey" class="searchButton" id="@butId"></a>
+</div>
