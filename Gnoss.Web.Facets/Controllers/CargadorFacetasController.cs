@@ -53,7 +53,9 @@ using System.Collections.Generic;
 using System.Data;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
@@ -422,7 +424,8 @@ namespace ServicioCargaFacetas
         {
             try
             {
-                if(pParametros == null)
+                ProyectoCN proyectoCN = new ProyectoCN(mEntityContext, mLoggingService, mConfigService, mServicesUtilVirtuosoAndReplication);
+                if (pParametros == null)
                 {
                     pParametros = "";
                 }
@@ -437,18 +440,10 @@ namespace ServicioCargaFacetas
                 if (pUbicacionBusqueda == null)
                 {
                     pUbicacionBusqueda = "";
-                }
-                if (pUbicacionBusqueda == null)
-                {
-                    pUbicacionBusqueda = "";
-                }
+                }               
                 if (pFiltroContexto == null) 
                 {
                     pFiltroContexto = "";
-                }
-                if(pFaceta == null)
-                {
-                    pFaceta = "";
                 }
                 if (pNumeroFacetas == null)
                 {
@@ -646,13 +641,23 @@ namespace ServicioCargaFacetas
 
                 if (jsonRequest)
                 {
-                    //return View("CargarFacetas");
-                    JsonSerializerSettings jsonSerializerSettings = new JsonSerializerSettings
+                    string respuesta = string.Empty;
+
+                    using (MemoryStream input = new MemoryStream())
                     {
-                        PreserveReferencesHandling = PreserveReferencesHandling.Objects,
-                        TypeNameHandling = TypeNameHandling.All
-                    };
-                    string respuesta = JsonConvert.SerializeObject(facModel, jsonSerializerSettings);
+                        BinaryFormatter bformatter = new BinaryFormatter();
+                        bformatter.Serialize(input, facModel);
+                        input.Seek(0, SeekOrigin.Begin);
+
+                        using (MemoryStream output = new MemoryStream())
+                        using (DeflateStream deflateStream = new DeflateStream(output, CompressionMode.Compress))
+                        {
+                            input.CopyTo(deflateStream);
+                            deflateStream.Close();
+
+                            respuesta = Convert.ToBase64String(output.ToArray());
+                        }
+                    }
                     if (mHttpContextAccessor.HttpContext.Request.Headers["User-Agent"].Contains("GnossInternalRequest"))
                     {
                         respuesta = SerializeViewData(respuesta);
@@ -685,7 +690,8 @@ namespace ServicioCargaFacetas
             catch (ThreadAbortException) { }
             catch (Exception ex)
             {
-                mUtilServicios.EnviarErrorYGuardarLog("Error: " + ex.Message + "\r\nPila: " + ex.StackTrace, "error", mEsBot);
+                mLoggingService.GuardarLogError(ex);
+                throw;
             }
 
             return new EmptyResult();
@@ -871,7 +877,8 @@ namespace ServicioCargaFacetas
                 TypeNameHandling = TypeNameHandling.All,
                 TypeNameAssemblyFormat = System.Runtime.Serialization.Formatters.FormatterAssemblyStyle.Full
             };
-            string jsonViewData = JsonConvert.SerializeObject(ViewData, jsonSerializerSettingsVB);
+            Dictionary<string, object> dic = ViewData.Where(k => !k.Key.Equals("LoggingService")).ToDictionary(k => k.Key, v => v.Value);
+            string jsonViewData = JsonConvert.SerializeObject(dic, jsonSerializerSettingsVB);
 
             return json + "{ComienzoJsonViewData}" + jsonViewData;
         }
@@ -1256,8 +1263,7 @@ namespace ServicioCargaFacetas
                     }
                 }
             }
-
-            //TODO FERNANDO: Comprobar que estas lineas no afectan a la cache (Antiguo comentario de javi: Creo que esto no tiene sentido, lo comento por si acaso, pero algún día lo borraré.)      
+                         
             if (!pParametros_adiccionales.StartsWith("SPARQL"))
             {
                 string[] argsAdicionales = pParametros_adiccionales.Split(separador, StringSplitOptions.RemoveEmptyEntries);
