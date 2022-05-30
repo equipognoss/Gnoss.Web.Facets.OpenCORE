@@ -8,10 +8,10 @@ Configuración estandar de esta aplicación en el archivo docker-compose.yml:
 
 ```yml
 facets:
-    image: facets
+    image: docker.gnoss.com/facets
     env_file: .env
     ports:
-     - ${puerto_facetas}:80
+     - ${puerto_facets}:80
     environment:
      virtuosoConnectionString: ${virtuosoConnectionString}
      acid: ${acid}
