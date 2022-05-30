@@ -7,7 +7,7 @@ Aplicación Web que se encarga de mostrar los filtros de búsqueda (facetas) dis
 Configuración estandar de esta aplicación en el archivo docker-compose.yml: 
 
 ```yml
-facetas:
+facets:
     image: facets
     env_file: .env
     ports:
@@ -28,8 +28,8 @@ facetas:
      Servicios__urlBase: ${Servicios__urlBase}
      connectionType: ${connectionType}
     volumes:
-      - ./logs/facetas:/app/logs
-      - ./logs/facetas:/app/trazas
+      - ./logs/facets:/app/logs
+      - ./logs/facets:/app/trazas
 ```
 
 Se pueden consultar los posibles valores de configuración de cada parámetro aquí: https://github.com/equipognoss/Gnoss.Platform.Deploy
