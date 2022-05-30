@@ -8,7 +8,7 @@ Configuración estandar de esta aplicación en el archivo docker-compose.yml:
 
 ```yml
 facets:
-    image: docker.gnoss.com/facets
+    image: gnoss/facets
     env_file: .env
     ports:
      - ${puerto_facets}:80
