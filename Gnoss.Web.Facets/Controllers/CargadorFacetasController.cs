@@ -352,6 +352,7 @@ namespace ServicioCargaFacetas
         #region Constructor
 
         public CargadorFacetasController(EntityContext entityContext, LoggingService loggingService, RedisCacheWrapper redisCacheWrapper, ConfigService configService, VirtuosoAD virtuosoAD, GnossCache gnossCache, UtilServicios utilServicios, IHttpContextAccessor httpContextAccessor, ICompositeViewEngine viewEngine, IHostingEnvironment env, IServicesUtilVirtuosoAndReplication servicesUtilVirtuosoAndReplication)
+            :base (loggingService, configService, entityContext, redisCacheWrapper, gnossCache, virtuosoAD, httpContextAccessor, servicesUtilVirtuosoAndReplication)
         {
             mEntityContext = entityContext;
             mLoggingService = loggingService;
@@ -1336,7 +1337,10 @@ namespace ServicioCargaFacetas
 
             mFormulariosSemanticos = mUtilServiciosFacetas.ObtenerFormulariosSemanticos(mTipoBusqueda, mOrganizacionID, mProyectoID);
 
-            if (mListaItemsBusqueda.Count > 0 && !mListaFiltros.ContainsKey("rdf:type"))
+            if (mListaItemsBusqueda.Count > 0 && !mListaFiltros.ContainsKey("rdf:type") && 
+                (FilaPestanyaBusquedaActual == null || string.IsNullOrEmpty(FilaPestanyaBusquedaActual.CampoFiltro) || FilaPestanyaBusquedaActual.CampoFiltro.Contains("rdf:type") ||
+                !(mListaItemsBusqueda.Count == 1 && mListaItemsBusqueda[0] == "Recurso"))
+                )
             {
                 mListaFiltros.Add("rdf:type", mListaItemsBusqueda);
             }
@@ -2140,6 +2144,9 @@ namespace ServicioCargaFacetas
             controllerName = controllerName.Substring(controllerName.LastIndexOf('.') + 1);
             controllerName = controllerName.Substring(0, controllerName.IndexOf("Controller"));
             ViewBag.ControllerName = controllerName;
+
+            ViewBag.BaseUrlContent = BaseURLContent;
+            ViewBag.BaseUrlPersonalizacion = BaseURLPersonalizacion;
 
             ProyectoCN proyCN = new ProyectoCN(mEntityContext, mLoggingService, mConfigService, mServicesUtilVirtuosoAndReplication);
             // las personalizaciones no se cargan en la página de administración de miembros
@@ -10774,6 +10781,17 @@ namespace ServicioCargaFacetas
         }
 
         /// <summary>
+        /// Obtiene la URL del los elementos de contenido de la página
+        /// </summary>
+        public string BaseURLContent
+        {
+            get
+            {
+                return mControladorBase.BaseURLContent;
+            }
+        }
+
+        /// <summary>
         /// Obtiene el texto "Sin especifiar" para el idioma concreto
         /// </summary>
         private string TextoSinEspecificar
@@ -10960,22 +10978,18 @@ namespace ServicioCargaFacetas
         {
             get
             {
-                if (Request.Headers.ContainsKey("Referer"))
-                {
-                    string http = Request.Headers["Referer"].ToString().Substring(0, Request.Headers["Referer"].ToString().IndexOf("/") + 2);
-                    string url = Request.Headers["Referer"].ToString().Substring(http.Length);
-                    mBaseUrl = http + url.Substring(0, url.IndexOf("/")); ;
-                }
-                else if (ProyectoSeleccionado != null && ProyectoSeleccionado.FilaProyecto.URLPropia != null)
-                {
-                    mBaseUrl = ProyectoSeleccionado.UrlPropia(mControladorBase.IdiomaUsuario);
-                }
+                return mControladorBase.BaseURL;
+            }
+        }
 
-                if (mBaseUrl == null || mBaseUrl == "")
-                {
-                    mBaseUrl = mConfigService.ObtenerUrlBase();
-                }
-                return mBaseUrl;
+        /// <summary>
+        /// Obtiene la URL del los elementos de contenido de la página
+        /// </summary>
+        public string BaseURLPersonalizacion
+        {
+            get
+            {
+                return mControladorBase.BaseURLPersonalizacion;
             }
         }
 

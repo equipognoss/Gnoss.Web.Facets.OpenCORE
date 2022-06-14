@@ -38,7 +38,6 @@ namespace ServicioCargaFacetasMVC.Middlewares
             //ComprobarTrazaHabilitada(pEntityContext, pLoggingService, pRedisCacheWrapper, pHttpContextAccessor);
             pLoggingService.AgregarEntrada("TiemposMVC_Application_BeginRequest");
 
-
             pLoggingService.AgregarEntrada("TiemposMVC_Application_FinnRequest");
         }
 
