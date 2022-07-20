@@ -1705,7 +1705,6 @@ namespace ServicioCargaFacetas
                     }
                     else if (objetoFaceta.TipoPropiedad.Equals(TipoPropiedadFaceta.Fecha))
                     {
-                        //TODO SANTI: Faceta tipo FechaMinMax
                         if (objetoFaceta.AlgoritmoTransformacion.Equals(TiposAlgoritmoTransformacion.FechaMinMax))
                         {
                             ObtenerDeVirtuosoRangoMinMax(objetoFaceta.ClaveFaceta, mListaFiltros, objetoFaceta, true, permitirRecursosPrivados, objetoFaceta.Inmutable, pEsMovil);
@@ -2561,7 +2560,7 @@ namespace ServicioCargaFacetas
             int inicio = 0;
             int fin = pNumeroFacetas;
 
-            bool plegadas = (pNumeroFacetas.Equals(3) && mParametroProyecto.ContainsKey(ParametroAD.TerceraPeticionFacetasPlegadas) && mParametroProyecto[ParametroAD.TerceraPeticionFacetasPlegadas].Equals("1"));
+            bool plegadas = pNumeroFacetas.Equals(3) && mParametroProyecto.ContainsKey(ParametroAD.TerceraPeticionFacetasPlegadas) && mParametroProyecto[ParametroAD.TerceraPeticionFacetasPlegadas].Equals("1");
 
             if (mParametroProyecto.ContainsKey(ParametroAD.NumeroFacetasPrimeraPeticion) || mParametroProyecto.ContainsKey(ParametroAD.NumeroFacetasSegundaPeticion))
             {
@@ -5783,9 +5782,9 @@ namespace ServicioCargaFacetas
 
                     string dia = fecha.Substring(6, 2);
                     string mes = fecha.Substring(4, 2);
-                    string año = fecha.Substring(0, 4);
+                    string anio = fecha.Substring(0, 4);
 
-                    valor = año + dia + mes;
+                    valor = anio + dia + mes;
 
                     if (dia != "00")
                     {
@@ -5797,9 +5796,9 @@ namespace ServicioCargaFacetas
                         fecha1 += mes + "/";
                     }
 
-                    if (año != "0000")
+                    if (anio != "0000")
                     {
-                        fecha1 += año + "/";
+                        fecha1 += anio + "/";
                     }
 
 
@@ -5844,13 +5843,13 @@ namespace ServicioCargaFacetas
 
                         string dia = fecha1.Substring(6, 2);
                         string mes = fecha1.Substring(4, 2);
-                        string año = fecha1.Substring(0, 4);
+                        string anio = fecha1.Substring(0, 4);
 
                         fecha2 = cachosFecha[1];
 
                         string dia2 = fecha2.Substring(6, 2);
                         string mes2 = fecha2.Substring(4, 2);
-                        string año2 = fecha2.Substring(0, 4);
+                        string anio2 = fecha2.Substring(0, 4);
 
                         if (dia.Equals("00"))
                         {
@@ -5859,12 +5858,12 @@ namespace ServicioCargaFacetas
                                 int numeroMes = 0;
                                 int.TryParse(mes, out numeroMes);
                                 fecha1 = ObtenerTextoRangoFecha(false, numeroMes);
-                                fecha2 = " " + GetText("COMBUSQUEDAAVANZADA", "DEL") + " " + año;
+                                fecha2 = " " + GetText("COMBUSQUEDAAVANZADA", "DEL") + " " + anio;
                                 esAnio = true;
                             }
                             else
                             {
-                                fecha2 = año;
+                                fecha2 = anio;
                                 fecha1 = "";
                                 esAnio = true;
                             }
@@ -5882,13 +5881,13 @@ namespace ServicioCargaFacetas
                             else if (dia.Equals("00"))
                             {
                                 //Solo tenemos el año
-                                fecha1 = año;
-                                fecha2 = "-" + año2;
+                                fecha1 = anio;
+                                fecha2 = "-" + anio2;
                             }
                         }
                         else
                         {
-                            fecha1 = dia + "/" + mes + "/" + año + "-";
+                            fecha1 = dia + "/" + mes + "/" + anio + "-";
                         }
                     }
 
@@ -5919,15 +5918,8 @@ namespace ServicioCargaFacetas
                     }
                 }
 
-                if (esAnio)
-                {
-                    //Mostramos la menor de las fechas.
-                    nombreReal = fecha1;
-                }
-                else
-                {
-                    nombreReal = fecha1 + fecha2;
-                }
+                nombreReal = fecha1 + fecha2;
+                
 
                 if (!pFiltro.Equals(valor))
                 {
@@ -8726,7 +8718,7 @@ namespace ServicioCargaFacetas
                 if (!elementos.ContainsKey((string)myrow[0]))
                 {
                     string nombre = (string)myrow[0];
-                    if (String.IsNullOrEmpty(nombre))
+                    if (string.IsNullOrEmpty(nombre))
                     {
                         nombre = TextoSinEspecificar;
                     }
@@ -8761,21 +8753,21 @@ namespace ServicioCargaFacetas
                     FacetadoCL facetadoCL = new FacetadoCL(mUtilServicios.UrlIntragnoss, mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
                     facetadoTesSemDS = facetadoCL.ObtenerModeloTesauroSemanticoDeBusquedaEnProyecto(mGrafoID, pFaceta.ClaveFaceta, UtilIdiomas.LanguageCode);
 
-
                     if (facetadoTesSemDS == null)
                     {
                         FacetadoCN facCN = new FacetadoCN(mUtilServicios.UrlIntragnoss, mGrafoID, mEntityContext, mLoggingService, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);                        
                         facetadoTesSemDS = facCN.ObtenerValoresPropiedadesEntidadesTodas(mGrafoID, listaPropsTesSem, true);
 
                         facCN.Dispose();
-                    }
 
-                    if (!TesauroSemDSFaceta.ContainsKey(pFaceta.ClaveFaceta))
-                    {
-                        TesauroSemDSFaceta.Add(pFaceta.ClaveFaceta, facetadoTesSemDS);
+                        if (!TesauroSemDSFaceta.ContainsKey(pFaceta.ClaveFaceta))
+                        {
+                            TesauroSemDSFaceta.Add(pFaceta.ClaveFaceta, facetadoTesSemDS);
+                        }
+
+                        facetadoCL.AgregarTesauroSemanticoDeBusquedaEnProyecto(facetadoTesSemDS, mGrafoID, pFaceta.ClaveFaceta, UtilIdiomas.LanguageCode);
+                        facetadoCL.Dispose();
                     }
-                    facetadoCL.AgregarTesauroSemanticoDeBusquedaEnProyecto(facetadoTesSemDS, mGrafoID, pFaceta.ClaveFaceta);
-                    facetadoCL.Dispose();
                 }
                 else
                 {
@@ -8793,7 +8785,7 @@ namespace ServicioCargaFacetas
             if (mFacetasHomeCatalogo)
             {
                 url = ObtenerUrlPaginaActual(pFaceta);
-                accion = "document.location = '" + url + "?";
+                accion = $"document.location = '{url}?";
             }
 
             int limite = pLimite;
@@ -8805,7 +8797,8 @@ namespace ServicioCargaFacetas
 
             FacetModel facetaModel = new FacetModel();
             facetaModel.FacetItemList = new List<FacetItemModel>();
-            facetaModel.ThesaurusID = Guid.Empty;
+            //Se le da este guid para que la vista reconozca a través de el que es una faceta de tipo tesauro semántico.
+            facetaModel.ThesaurusID = new Guid("11111111-1111-1111-1111-111111111111"); 
             facetaModel.Key = idPanel;
             facetaModel.Name = Titulo;
             facetaModel.OneFacetRequest = !string.IsNullOrEmpty(mFaceta);
@@ -8815,7 +8808,7 @@ namespace ServicioCargaFacetas
             {
                 if (mFaceta != null && mFaceta.Equals(pFaceta.ClaveFaceta) && mListaFiltrosConGrupos.ContainsKey("default;rdf:type") && mListaFiltrosConGrupos["default;rdf:type"].Count == 1)
                 {
-                    facetaModel.FacetKey = mListaFiltrosConGrupos["default;rdf:type"][0] + ";" + pFaceta.ClaveFaceta;
+                    facetaModel.FacetKey = $"{mListaFiltrosConGrupos["default;rdf:type"][0]};{pFaceta.ClaveFaceta}";
                 }
                 else
                 {
@@ -8827,6 +8820,11 @@ namespace ServicioCargaFacetas
             facetaModel.Order = pFaceta.Orden;
             facetaModel.Multilanguage = pFaceta.MultiIdioma.ToString().ToLower();
             facetaModel.AutocompleteBehaviour = ObtenerBehaviourDeComportamiento(pFaceta.Comportamiento);
+
+            if(mParametroProyecto.ContainsKey(ParametroAD.VerMasFacetaTesauroSemantico) && mParametroProyecto[ParametroAD.VerMasFacetaTesauroSemantico].Equals("1"))
+            {
+                facetaModel.SeeMore = true;
+            }
 
             List<string> filtrosFacetas = null;
             List<string> filtrosUsuarios = null;
@@ -8942,9 +8940,15 @@ namespace ServicioCargaFacetas
 
                 if (!estaFacetado)
                 {
-                    foreach (string padre in listaElementosPadre)
+                    limite = listaElementosPadre.Count;
+                    if (facetaModel.SeeMore && pLimite < limite)
                     {
-                        FacetItemModel facetaItemModel = AgregarElementoArbolTesSem(pFaceta, padre, string.Empty, padreHijos, listaElementosOrdenados, elementos, facetaModel.FacetKey, pOrdenarPorNumero);
+                        limite = pLimite;
+                    }
+
+                    for (int i = 0; i < limite; i++)
+                    {
+                        FacetItemModel facetaItemModel = AgregarElementoArbolTesSem(pFaceta, listaElementosPadre[i], string.Empty, padreHijos, listaElementosOrdenados, elementos, facetaModel.FacetKey, pOrdenarPorNumero);
                         if (facetaItemModel != null)
                         {
                             facetaModel.FacetItemList.Add(facetaItemModel);
