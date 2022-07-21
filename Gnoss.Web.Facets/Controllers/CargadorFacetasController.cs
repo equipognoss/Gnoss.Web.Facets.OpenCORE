@@ -569,15 +569,8 @@ namespace ServicioCargaFacetas
                 string urlBaseFacetas = "";
                 if (ProyectoSeleccionado.Clave.Equals(ProyectoAD.MetaProyecto))
                 {
-                    if (mProyectoVirtualID.Equals(ProyectoAD.MetaProyecto))
-                    {
-                        urlBaseFacetas = BaseURLIdioma;
-                    }
-                    else
-                    {
-                        ProyectoCL proyCL = new ProyectoCL(mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
-                        urlBaseFacetas = proyCL.ObtenerURLPropiaProyecto(mProyectoVirtualID, mControladorBase.IdiomaUsuario).TrimEnd('/') + idioma;
-                    }
+                    ProyectoCL proyCL = new ProyectoCL(mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
+                    urlBaseFacetas = proyCL.ObtenerURLPropiaProyecto(mProyectoVirtualID, mControladorBase.IdiomaUsuario).TrimEnd('/') + idioma;
                     if (IdentidadActual.TrabajaConOrganizacion)
                     {
                         urlBaseFacetas = urlBaseFacetas.TrimEnd('/') + "/" + UtilIdiomas.GetText("URLSEM", "IDENTIDAD") + "/" + IdentidadActual.PerfilUsuario.NombreCortoOrg;
