@@ -2,6 +2,8 @@
 
 # Gnoss.Web.Facets.OpenCORE
 
+![](https://github.com/equipognoss/Gnoss.Web.Facets.OpenCORE/workflows/BuildWeb/badge.svg)
+
 Aplicación Web que se encarga de mostrar los filtros de búsqueda (facetas) disponibles en una página de búsqueda.
 
 Configuración estandar de esta aplicación en el archivo docker-compose.yml: 
