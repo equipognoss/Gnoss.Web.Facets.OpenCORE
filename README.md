@@ -2,7 +2,7 @@
 
 # Gnoss.Web.Facets.OpenCORE
 
-![](https://github.com/equipognoss/Gnoss.Web.Facets.OpenCORE/workflows/BuildWeb/badge.svg)
+![](https://github.com/equipognoss/Gnoss.Web.Facets.OpenCORE/workflows/BuildFacets/badge.svg)
 
 Aplicación Web que se encarga de mostrar los filtros de búsqueda (facetas) disponibles en una página de búsqueda.
 
