@@ -3,7 +3,6 @@ using Es.Riam.Gnoss.AD.EncapsuladoDatos;
 using Es.Riam.Gnoss.AD.EntityModel;
 using Es.Riam.Gnoss.AD.EntityModel.Models.Faceta;
 using Es.Riam.Gnoss.AD.EntityModel.Models.ParametroGeneralDS;
-using Es.Riam.Gnoss.AD.EntityModelBASE;
 using Es.Riam.Gnoss.AD.Facetado;
 using Es.Riam.Gnoss.AD.Facetado.Model;
 using Es.Riam.Gnoss.AD.Parametro;
@@ -37,7 +36,6 @@ using Es.Riam.Gnoss.Web.MVC.Models;
 using Es.Riam.Gnoss.Web.MVC.Models.Administracion;
 using Es.Riam.Interfaces;
 using Es.Riam.Util;
-using Gnoss.Web.Facets;
 using Gnoss.Web.Services.VirtualPathProvider;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Hosting;
@@ -84,7 +82,9 @@ namespace ServicioCargaFacetas
         /// Obtiene si el ecosistema tiene una personalizacion de vistas
         /// </summary>
         private Guid? mPersonalizacionEcosistemaID = null;
+
         private bool? mComunidadExcluidaPersonalizacionEcosistema = null;
+        private static object mBloqueoFiltrosSearchPersonalizados = new object();
 
         /// <summary>
         /// Fila de parámetros de aplicación
@@ -352,7 +352,7 @@ namespace ServicioCargaFacetas
         #region Constructor
 
         public CargadorFacetasController(EntityContext entityContext, LoggingService loggingService, RedisCacheWrapper redisCacheWrapper, ConfigService configService, VirtuosoAD virtuosoAD, GnossCache gnossCache, UtilServicios utilServicios, IHttpContextAccessor httpContextAccessor, ICompositeViewEngine viewEngine, IHostingEnvironment env, IServicesUtilVirtuosoAndReplication servicesUtilVirtuosoAndReplication)
-            :base (loggingService, configService, entityContext, redisCacheWrapper, gnossCache, virtuosoAD, httpContextAccessor, servicesUtilVirtuosoAndReplication)
+            : base(loggingService, configService, entityContext, redisCacheWrapper, gnossCache, virtuosoAD, httpContextAccessor, servicesUtilVirtuosoAndReplication)
         {
             mEntityContext = entityContext;
             mLoggingService = loggingService;
@@ -388,12 +388,12 @@ namespace ServicioCargaFacetas
 
             if (pTipoBusqueda == TipoBusqueda.Mensajes)
             {
-                url = "/" + UtilIdiomas.GetText("URLSEM", "MENSAJES");
+                url = $"/{UtilIdiomas.GetText("URLSEM", "MENSAJES")}";
             }
 
             if (!string.IsNullOrEmpty(pParametros))
             {
-                url += "?" + pParametros.Replace('|', '&');
+                url += $"?{pParametros.Replace('|', '&')}";
             }
 
             return url;
@@ -421,7 +421,7 @@ namespace ServicioCargaFacetas
         /// <returns></returns>
         [HttpGet, HttpPost]
         [Route("CargarFacetas")]
-        public ActionResult CargarFacetas([FromForm] string pProyectoID,[FromForm] bool pEstaEnProyecto, [FromForm] bool pEsUsuarioInvitado, [FromForm] string pIdentidadID, [FromForm] string pParametros, [FromForm] string pUbicacionBusqueda, [FromForm] string pLanguageCode, [FromForm] bool pAdministradorVeTodasPersonas, [FromForm] short pTipoBusqueda, [FromForm] int? pNumeroFacetas, [FromForm] string pFaceta, [FromForm] string pGrafo, [FromForm] string pParametros_adiccionales, [FromForm] string pFiltroContexto, [FromForm] string pUrlPaginaActual, [FromForm] bool pUsarMasterParaLectura, [FromForm] bool? pJson, [FromForm] string tokenAfinidad)
+        public ActionResult CargarFacetas([FromForm] string pProyectoID, [FromForm] bool pEstaEnProyecto, [FromForm] bool pEsUsuarioInvitado, [FromForm] string pIdentidadID, [FromForm] string pParametros, [FromForm] string pUbicacionBusqueda, [FromForm] string pLanguageCode, [FromForm] bool pAdministradorVeTodasPersonas, [FromForm] short pTipoBusqueda, [FromForm] int? pNumeroFacetas, [FromForm] string pFaceta, [FromForm] string pGrafo, [FromForm] string pParametros_adiccionales, [FromForm] string pFiltroContexto, [FromForm] string pUrlPaginaActual, [FromForm] bool pUsarMasterParaLectura, [FromForm] bool? pJson, [FromForm] string tokenAfinidad)
         {
             try
             {
@@ -441,8 +441,8 @@ namespace ServicioCargaFacetas
                 if (pUbicacionBusqueda == null)
                 {
                     pUbicacionBusqueda = "";
-                }               
-                if (pFiltroContexto == null) 
+                }
+                if (pFiltroContexto == null)
                 {
                     pFiltroContexto = "";
                 }
@@ -494,13 +494,12 @@ namespace ServicioCargaFacetas
                     ProyectoCL paramCL = new ProyectoCL(mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
                     Dictionary<string, string> dicParametros = paramCL.ObtenerParametrosProyecto(proyectoID);
                     paramCL.Dispose();
-
-
                     mUrlPagina = new Uri(mUrlPagina).PathAndQuery;
+
                     //URL de identidad
-                    if (mUrlPagina.ToLower().StartsWith(idioma + "/" + UtilIdiomas.GetText("URLSEM", "IDENTIDAD") + "/"))
+                    if (mUrlPagina.ToLower().StartsWith($"{idioma}/{UtilIdiomas.GetText("URLSEM", "IDENTIDAD")}/"))
                     {
-                        mUrlPagina = mUrlPagina.Substring((idioma + "/" + UtilIdiomas.GetText("URLSEM", "IDENTIDAD") + "/").Length);
+                        mUrlPagina = mUrlPagina.Substring(($"{idioma}/{UtilIdiomas.GetText("URLSEM", "IDENTIDAD")}/").Length);
                         if (mUrlPagina.IndexOf('/') > 0)
                         {
                             mUrlPagina = mUrlPagina.Substring(mUrlPagina.IndexOf('/'));
@@ -510,10 +509,11 @@ namespace ServicioCargaFacetas
                             mUrlPagina = "";
                         }
                     }
+
                     //URL de comunidad 
-                    else if (mUrlPagina.ToLower().StartsWith(idioma + "/" + UtilIdiomas.GetText("URLSEM", "COMUNIDAD") + "/"))
+                    else if (mUrlPagina.ToLower().StartsWith($"{idioma}/{UtilIdiomas.GetText("URLSEM", "COMUNIDAD")}/"))
                     {
-                        mUrlPagina = mUrlPagina.Substring((idioma + "/" + UtilIdiomas.GetText("URLSEM", "COMUNIDAD") + "/").Length);
+                        mUrlPagina = mUrlPagina.Substring(($"{idioma}/{UtilIdiomas.GetText("URLSEM", "COMUNIDAD")}/").Length);
                         if (mUrlPagina.IndexOf('/') > 0)
                         {
                             mUrlPagina = mUrlPagina.Substring(mUrlPagina.IndexOf('/'));
@@ -526,7 +526,7 @@ namespace ServicioCargaFacetas
                     //URL de 'mygnoss' sin comunidad (pero no se trata de una comunidad sin nombre corto)
                     else if (pLanguageCode.ToLower() != "es" && mUrlPagina.ToLower().StartsWith(idioma + "/") && !(dicParametros.ContainsKey(ParametroAD.ProyectoSinNombreCortoEnURL) && (dicParametros[ParametroAD.ProyectoSinNombreCortoEnURL] == "1" || dicParametros[ParametroAD.ProyectoSinNombreCortoEnURL] == "true")))
                     {
-                        mUrlPagina = mUrlPagina.Substring((idioma + "/").Length);
+                        mUrlPagina = mUrlPagina.Substring(($"{idioma}/").Length);
                         if (mUrlPagina.IndexOf('/') > 0)
                         {
                             mUrlPagina = mUrlPagina.Substring(mUrlPagina.IndexOf('/'));
@@ -573,7 +573,7 @@ namespace ServicioCargaFacetas
                     urlBaseFacetas = proyCL.ObtenerURLPropiaProyecto(mProyectoVirtualID, mControladorBase.IdiomaUsuario).TrimEnd('/') + idioma;
                     if (IdentidadActual.TrabajaConOrganizacion)
                     {
-                        urlBaseFacetas = urlBaseFacetas.TrimEnd('/') + "/" + UtilIdiomas.GetText("URLSEM", "IDENTIDAD") + "/" + IdentidadActual.PerfilUsuario.NombreCortoOrg;
+                        urlBaseFacetas = $"{urlBaseFacetas.TrimEnd('/')}/{UtilIdiomas.GetText("URLSEM", "IDENTIDAD")}/{IdentidadActual.PerfilUsuario.NombreCortoOrg}";
                     }
                 }
                 else
@@ -614,7 +614,7 @@ namespace ServicioCargaFacetas
                     {
                         foreach (string valor in mListaFiltros[clave])
                         {
-                            parametros += "|" + clave + "=" + valor;
+                            parametros += $"|{clave}={valor}";
                         }
                     }
                 }
@@ -675,9 +675,8 @@ namespace ServicioCargaFacetas
                     }
 
                     //Devuelvo la respuesta en el response de la petición
-
                     HttpContext.Response.ContentType = "text/plain";
-                    HttpContext.Response.WriteAsync(funcionCallBack + "({\"d\":" + System.Text.Json.JsonSerializer.Serialize(resultado) + "});");
+                    HttpContext.Response.WriteAsync($"{funcionCallBack}({{\"d\":{System.Text.Json.JsonSerializer.Serialize(resultado)}}});");
                 }
                 #endregion
             }
@@ -711,7 +710,6 @@ namespace ServicioCargaFacetas
         {
             try
             {
-
                 if (string.IsNullOrEmpty(pProyectoID))
                 {
                     pProyectoID = Request.Form["pProyectoID"];
@@ -813,22 +811,22 @@ namespace ServicioCargaFacetas
                         }
                     }
 
-                    mUrlPagina = "/" + nombreSem;
+                    mUrlPagina = $"/{nombreSem}";
                     if (pestaña == GetText("URLSEM", "BUSQUEDAAVANZADA"))
                     {
-                        mUrlPagina = "/" + GetText("URLSEM", "BUSQUEDAAVANZADA");
+                        mUrlPagina = $"/{GetText("URLSEM", "BUSQUEDAAVANZADA")}";
                     }
                     else if (pestaña == GetText("URLSEM", "DEBATES"))
                     {
-                        mUrlPagina = "/" + GetText("URLSEM", "DEBATES");
+                        mUrlPagina = $"/{GetText("URLSEM", "DEBATES")}";
                     }
                     else if (pestaña == GetText("URLSEM", "PREGUNTAS"))
                     {
-                        mUrlPagina = "/" + GetText("URLSEM", "PREGUNTAS");
+                        mUrlPagina = $"/{GetText("URLSEM", "PREGUNTAS")}";
                     }
                     else if (pestaña == GetText("URLSEM", "ENCUESTAS"))
                     {
-                        mUrlPagina = "/" + GetText("URLSEM", "ENCUESTAS");
+                        mUrlPagina = $"/{GetText("URLSEM", "ENCUESTAS")}";
                     }
                 }
 
@@ -837,7 +835,6 @@ namespace ServicioCargaFacetas
                 string grafo = mProyectoID.ToString();
                 if (pTipoBusqueda.Equals((short)TipoBusqueda.Mensajes) && !string.IsNullOrEmpty(pParametros_adiccionales))
                 {
-
                     parametros = pParametros_adiccionales.Split('|')[0];
                     identidadID = pParametros_adiccionales.Split('|')[1];
                     grafo = pParametros_adiccionales.Split('|')[2];
@@ -855,10 +852,12 @@ namespace ServicioCargaFacetas
             catch (ThreadAbortException) { }
             catch (Exception ex)
             {
-                mUtilServicios.EnviarErrorYGuardarLog("Error: " + ex.Message + "\r\nPila: " + ex.StackTrace, "error", mEsBot);
+                mUtilServicios.EnviarErrorYGuardarLog($"Error: {ex.Message}\r\nPila: {ex.StackTrace}", "error", mEsBot);
             }
+
             return new EmptyResult();
         }
+
         [NonAction]
         private string SerializeViewData(string json)
         {
@@ -874,8 +873,9 @@ namespace ServicioCargaFacetas
             Dictionary<string, object> dic = ViewData.Where(k => !k.Key.Equals("LoggingService")).ToDictionary(k => k.Key, v => v.Value);
             string jsonViewData = JsonConvert.SerializeObject(dic, jsonSerializerSettingsVB);
 
-            return json + "{ComienzoJsonViewData}" + jsonViewData;
+            return $"{json}{{ComienzoJsonViewData}}{jsonViewData}";
         }
+
         /// <summary>
         /// Carga las facetas para una búsqueda determinada
         /// </summary>
@@ -914,11 +914,11 @@ namespace ServicioCargaFacetas
             {
                 try
                 {
-                    pParametros_adiccionales += "|skos:ConceptID=gnoss:" + GestorTesauro.TesauroDW.ListaTesauroUsuario.FirstOrDefault().CategoriaTesauroPublicoID.ToString().ToUpper() + "|gnoss:hasEstadoPP=Publicado";
+                    pParametros_adiccionales += $"|skos:ConceptID=gnoss:{GestorTesauro.TesauroDW.ListaTesauroUsuario.FirstOrDefault().CategoriaTesauroPublicoID.ToString().ToUpper()}|gnoss:hasEstadoPP=Publicado";
                 }
                 catch (Exception)
                 {
-                    pParametros_adiccionales += "|skos:ConceptID=gnoss:" + GestorTesauro.TesauroDW.ListaTesauroOrganizacion.FirstOrDefault().CategoriaTesauroPublicoID.ToString().ToUpper() + "|gnoss:hasEstadoPP=Publicado";
+                    pParametros_adiccionales += $"|skos:ConceptID=gnoss:{GestorTesauro.TesauroDW.ListaTesauroOrganizacion.FirstOrDefault().CategoriaTesauroPublicoID.ToString().ToUpper()}|gnoss:hasEstadoPP=Publicado";
                 }
             }
 
@@ -935,7 +935,6 @@ namespace ServicioCargaFacetas
                 pParametros_adiccionales = trozo1 + trozo2;
             }
             #endregion
-
 
             #region Sin caché
 
@@ -966,7 +965,6 @@ namespace ServicioCargaFacetas
             }
 
             #endregion
-
 
             #region Es bot
 
@@ -1153,7 +1151,7 @@ namespace ServicioCargaFacetas
                 tipoProyecto = (TipoProyecto)FilaProyecto.TipoProyecto;
             }
 
-            
+
 
             if (!string.IsNullOrEmpty(pFiltroContexto))
             {
@@ -1257,7 +1255,7 @@ namespace ServicioCargaFacetas
                     }
                 }
             }
-                         
+
             if (!pParametros_adiccionales.StartsWith("SPARQL"))
             {
                 string[] argsAdicionales = pParametros_adiccionales.Split(separador, StringSplitOptions.RemoveEmptyEntries);
@@ -1330,10 +1328,7 @@ namespace ServicioCargaFacetas
 
             mFormulariosSemanticos = mUtilServiciosFacetas.ObtenerFormulariosSemanticos(mTipoBusqueda, mOrganizacionID, mProyectoID);
 
-            if (mListaItemsBusqueda.Count > 0 && !mListaFiltros.ContainsKey("rdf:type") && 
-                (FilaPestanyaBusquedaActual == null || string.IsNullOrEmpty(FilaPestanyaBusquedaActual.CampoFiltro) || FilaPestanyaBusquedaActual.CampoFiltro.Contains("rdf:type") ||
-                !(mListaItemsBusqueda.Count == 1 && mListaItemsBusqueda[0] == "Recurso"))
-                )
+            if (mListaItemsBusqueda.Count > 0 && !mListaFiltros.ContainsKey("rdf:type") && FilaPestanyaBusquedaActual != null && !string.IsNullOrEmpty(FilaPestanyaBusquedaActual.CampoFiltro) && (FilaPestanyaBusquedaActual.CampoFiltro.Contains("rdf:type") || !(mListaItemsBusqueda.Count == 1 && mListaItemsBusqueda[0] == "Recurso")))
             {
                 mListaFiltros.Add("rdf:type", mListaItemsBusqueda);
             }
@@ -1657,7 +1652,6 @@ namespace ServicioCargaFacetas
                     }
                     else
                     {
-                        //objetoFaceta = GestorFacetas.ListaFacetasPorClave[mFaceta];
                         objetoFaceta = ObtenerFacetaClaveTipo(mFaceta);
                     }
 
@@ -1941,15 +1935,12 @@ namespace ServicioCargaFacetas
             List<string> listaRdfType = new List<string>();
             if (mListaFiltros.ContainsKey(tipo))
             {
-                listaRdfType = mListaFiltros[tipo];
+                listaRdfType = mListaFiltros[tipo].Select(item => item.ToLower()).ToList();
             }
 
-            foreach (string rdfType in listaRdfType)
+            if (GestorFacetas.ListaFacetas.Any(item => item.ClaveFaceta.Equals(pClaveFaceta) && listaRdfType.Contains(item.ObjetoConocimiento.ToLower())))
             {
-                if(GestorFacetas.ListaFacetas.Any(item => item.ClaveFaceta.Equals(pClaveFaceta) && item.ObjetoConocimiento.ToLower().Equals(rdfType.ToLower())))
-                {
-                    return GestorFacetas.ListaFacetas.Where(item => item.ClaveFaceta.Equals(pClaveFaceta) && item.ObjetoConocimiento.ToLower().Equals(rdfType.ToLower())).FirstOrDefault();
-                }
+                return GestorFacetas.ListaFacetas.Where(item => item.ClaveFaceta.Equals(pClaveFaceta) && listaRdfType.Contains(item.ObjetoConocimiento.ToLower())).FirstOrDefault();
             }
 
             return GestorFacetas.ListaFacetasPorClave[pClaveFaceta];
@@ -1974,7 +1965,7 @@ namespace ServicioCargaFacetas
                         {
                             foreach (string valorAplicado in pListaFiltros[filtroAplicado])
                             {
-                                string filtroCompletoAplicado = filtroAplicado + "=" + valorAplicado;
+                                string filtroCompletoAplicado = $"{filtroAplicado}={valorAplicado}";
                                 if (parametroCondicionado.StartsWith(filtroCompletoAplicado))
                                 {
                                     string condiciones = parametroCondicionado.Substring(parametroCondicionado.IndexOf("@") + 1);
@@ -2015,6 +2006,7 @@ namespace ServicioCargaFacetas
                 }
             }
         }
+
         [NonAction]
         private string ObtenerFiltroAplicadoSinCondicional(string pParametros, string pParametros_adiccionales)
         {
@@ -2090,6 +2082,7 @@ namespace ServicioCargaFacetas
             //Si el perfil pertence a algún grupo de los asociados a facetas, no cargar facetas.
             return perfilConFacetasPrivadas;
         }
+
         [NonAction]
         private bool FacetaPrivadaEditores(string pFacetaPrivadaParaGrupoEditores)
         {
@@ -2114,6 +2107,7 @@ namespace ServicioCargaFacetas
 
             return facetaPrivadaGrupoEditores;
         }
+
         [NonAction]
         private bool EsBusquedaMyGnossGrafoHome(TipoBusqueda pTipoBusqueda)
         {
@@ -2162,7 +2156,7 @@ namespace ServicioCargaFacetas
                     vistaVirtualDW = vistaVirtualCL.ObtenerVistasVirtualPorProyectoID(pProyectoID, PersonalizacionEcosistemaID, ComunidadExcluidaPersonalizacionEcosistema);
 
                     mLoggingService.AgregarEntrada("Borramos las vistas del VirtualPathProvider");
-                    
+
                     BDVirtualPath.LimpiarListasRutasVirtuales();
                 }
 
@@ -2180,7 +2174,7 @@ namespace ServicioCargaFacetas
                         comunidad.ListaPersonalizaciones.Add(filaVistaVirtual.TipoPagina);
                     }
 
-                    ViewBag.Personalizacion = "$$$" + personalizacionProyecto;
+                    ViewBag.Personalizacion = $"$$${personalizacionProyecto}";
                 }
                 if (PersonalizacionEcosistemaID != Guid.Empty)
                 {
@@ -2189,7 +2183,7 @@ namespace ServicioCargaFacetas
                         comunidad.ListaPersonalizacionesEcosistema.Add(filaVistaVirtual.TipoPagina);
                     }
 
-                    ViewBag.PersonalizacionEcosistema = "$$$" + PersonalizacionEcosistemaID;
+                    ViewBag.PersonalizacionEcosistema = $"$$${PersonalizacionEcosistemaID}";
                 }
             }
 
@@ -2333,25 +2327,15 @@ namespace ServicioCargaFacetas
                 listaItems.Add(FacetadoAD.BUSQUEDA_CONTACTOS);
             }
 
-
             bool esBusquedaAvanzadaPrimeraCargaEnMetaProyecto = mTipoBusqueda.Equals(TipoBusqueda.BusquedaAvanzada) && mPrimeraCarga && ProyectoSeleccionado.Clave == ProyectoAD.MetaProyecto;
 
-
-            //La faceta de tipos de elementos se trae con la faceta categoria
-            //bool traerTipoElementosConCategoria = (!string.IsNullOrEmpty(mFaceta) && (mFaceta.Equals("rdf:type") || mFaceta.Equals("skos:ConceptID")));
-
             List<string> listaTablas = new List<string>();
-
             bool omitirPalabrasNoRelevantesSearch = true;
-            //if (mTipoBusqueda.Equals(TipoBusqueda.Contribuciones) || mTipoBusqueda.Equals(TipoBusqueda.Comunidades) || mTipoBusqueda.Equals(TipoBusqueda.PersonasYOrganizaciones) || (mTipoBusqueda.Equals(TipoBusqueda.Recursos) && string.IsNullOrEmpty(mFaceta)) || (mTipoBusqueda.Equals(TipoBusqueda.BusquedaAvanzada) || (pListaFiltros.ContainsKey("rdf:type") && pListaFiltros["rdf:type"].Count > 1) || pTipoBusqueda.Equals("MyGnoss") || mTipoBusqueda.Equals(TipoBusqueda.PersonasYOrganizaciones) || pTipoBusqueda.Equals("PersonaInicial") || mTipoBusqueda.Equals(TipoBusqueda.Comunidades)))
-            //{
-            //Entra por aquí cuando se debe mostrar la faceta Explora...
             mNecesarioMostarTiposElementos = true;
 
             Faceta facetaTipo = null;
             if (GestorFacetas.ListaFacetasPorClave.ContainsKey("rdf:type"))
             {
-                //tc.ObtenerParametroConfiguraciondeFaceta(mConfiguracionDS, listaItems, pTipoBusqueda, "rdf:type");
                 facetaTipo = GestorFacetas.ListaFacetasPorClave["rdf:type"];
             }
 
@@ -2366,7 +2350,6 @@ namespace ServicioCargaFacetas
                 reciproca = facetaTipo.Reciproca;
                 tipoPropiedadFaceta = facetaTipo.TipoPropiedad;
             }
-
 
             if (esBusquedaAvanzadaPrimeraCargaEnMetaProyecto)
             {
@@ -2506,20 +2489,13 @@ namespace ServicioCargaFacetas
                         listaItems.Add("Recurso");
                     }
                     listaItems.Add(tipo);
-
-                    //if ((!mListaFiltrosFacetasUsuario.ContainsKey("rdf:type") || mListaFiltrosFacetasUsuario["rdf:type"].Count == 0) && !GruposPorTipo)
-                    //{
-                    //    mFacetadoDS.Tables["rdf:type"].Clear();
-                    //}
                 }
             }
-            //}
 
             //Si es la búsqueda avanzada y es la primera carga, sólo se carga la faceta Explora...
             //Si no, se cargan todas las facetas
             if (!esBusquedaAvanzadaPrimeraCargaEnMetaProyecto)
             {
-
                 if ((!listaItems.Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_RECURSOS)) && ((listaItems.Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_COMPARTIDO)) || (listaItems.Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_PUBLICADO)) || (listaItems.Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_DEBATE)) || (listaItems.Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_PREGUNTA)) || (listaItems.Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_ENCUESTA)) || (listaItems.Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_FACTORDAFO))))
                 {
                     listaItems.Add(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_RECURSOS);
@@ -2595,13 +2571,11 @@ namespace ServicioCargaFacetas
                     string extraContexto = "";
                     try
                     {
-                        //DataRow myrow = mConfiguracionDS.Tables["TablaConfiguracion"].Rows[i];
                         Faceta faceta = listaFacetasRecorrer[i];
 
                         bool cargarFaceta = !faceta.OcultaEnFacetas;
                         if (cargarFaceta)
                         {
-
                             bool facetaPrivadaGrupoEditores = false;
                             if (!string.IsNullOrEmpty(faceta.FacetaPrivadaParaGrupoEditores))
                             {
@@ -2794,7 +2768,6 @@ namespace ServicioCargaFacetas
                                         {
                                             listaFacetasPlegadas.Add(faceta.ClaveFaceta, faceta.Reciproca);
                                             listaFacetasPlegadasExtraContexto.Add(faceta.ClaveFaceta, extraContexto);
-
                                         }
                                         else if (faceta.TipoPropiedad.Equals(TipoPropiedadFaceta.Fecha))
                                         {
@@ -2931,7 +2904,7 @@ namespace ServicioCargaFacetas
                     catch (Exception ex)
                     {
                         //Ha fallado al cargar una faceta, pero sigo con el resto
-                        mUtilServicios.EnviarErrorYGuardarLog("Error: " + ex.Message + "\r\nPila: " + ex.StackTrace, "errorFaceta", mEsBot);
+                        mUtilServicios.EnviarErrorYGuardarLog($"Error: {ex.Message}\r\nPila: {ex.StackTrace}", "errorFaceta", mEsBot);
                     }
                     finally
                     {
@@ -2957,99 +2930,6 @@ namespace ServicioCargaFacetas
             {
                 Task.WaitAll(listaTareasFacetas.ToArray());
             }
-
-            //int numeroComprobaciones = 0;
-            //bool estanTodasLasTablas = true;
-            //Dictionary<string, int> mContadorFilasPorTabla = new Dictionary<string, int>();
-            //while (true)
-            //{
-            //    //Hasta que no se hayan obtenido todas las facetas o lleve 0.5 segundos de espera no salgo del bucle
-            //    if (numeroComprobaciones++ < 5 && listaTablas.Count > mFacetadoDS.Tables.Count)
-            //    {
-            //        Thread.Sleep(100);
-            //    }
-            //    else
-            //    {
-            //        estanTodasLasTablas = true;
-
-            //        if (numeroComprobaciones < 5)
-            //        {
-            //            // Si todavía no hemos llegado al límite de comprobaciones
-            //            // comprobamos si están todas las tablas que se han consultado
-            //            foreach (string tabla in listaTablas)
-            //            {
-            //                if (!mContadorFilasPorTabla.ContainsKey(tabla))
-            //                {
-            //                    mContadorFilasPorTabla.Add(tabla, 0);
-            //                }
-
-            //                if (!mFacetadoDS.Tables.Contains(tabla) && !mFacetadoDSAuxPorFaceta.ContainsKey(tabla))
-            //                {
-            //                    estanTodasLasTablas = false;
-            //                    break;
-            //                }
-            //            }
-            //        }
-
-            //        if (estanTodasLasTablas)
-            //        {
-            //            // Si todavía no hemos llegado al límite de comprobaciones
-            //            // comprobamos si están todas las tablas que se han consultado
-            //            foreach (string tabla in listaTablas)
-            //            {
-            //                if (!mContadorFilasPorTabla.ContainsKey(tabla))
-            //                {
-            //                    mContadorFilasPorTabla.Add(tabla, 0);
-            //                }
-
-            //                if (!mFacetadoDS.Tables.Contains(tabla) && !mFacetadoDSAuxPorFaceta.ContainsKey(tabla))
-            //                {
-            //                    estanTodasLasTablas = false;
-            //                    break;
-            //                }
-            //            }
-
-            //            //Si ya están todas las tablas (o se ha sobrepasado el tiempo de espera) salimos del bucle
-            //            break;
-            //        }
-            //        else
-            //        {
-            //            //Si el tiempo de espera no se ha agotado y queda alguna tabla por traer, seguimos esperando
-            //            Thread.Sleep(100);
-            //        }
-            //    }
-            //}
-
-            //if (!estanTodasLasTablas)
-            //{
-            //    mTablasNoCargadas.Clear();
-
-            //    //Buscamos que tablas no están agregadas en el DS
-            //    foreach (string tabla in listaTablas)
-            //    {
-            //        if (!mFacetadoDS.Tables.Contains(tabla))
-            //        {
-            //            if (!tabla.Contains("skos:ConceptID") && GestorFacetas.FacetasDW.ListaFacetaFiltroProyecto.Count > 0)
-            //            {
-            //                //Agregamos el nombre de la faceta al final del resultado para notificar que no se ha podido cargar en el tiempo indicado.
-            //                mTablasNoCargadas.Add(tabla);
-            //            }
-            //            else
-            //            {
-            //                for (int i = inicio; i < fin; i++)
-            //                {
-            //                    if (listaFacetasRecorrer[i].ClaveFaceta.Equals("skos:ConceptID") && !listaFacetasRecorrer[i].FiltroProyectoID.Contains("|"))
-            //                    {
-            //                        if (!mTablasNoCargadas.Contains(listaFacetasRecorrer[i].ClaveFaceta + ":" + listaFacetasRecorrer[i].FiltroProyectoID))
-            //                        {
-            //                            mTablasNoCargadas.Add(listaFacetasRecorrer[i].ClaveFaceta + ":" + listaFacetasRecorrer[i].FiltroProyectoID);
-            //                        }
-            //                    }
-            //                }
-            //            }
-            //        }
-            //    }
-            //}
 
             for (int i = inicio; i < fin; i++)
             {
@@ -3107,7 +2987,7 @@ namespace ServicioCargaFacetas
                 catch (Exception ex)
                 {
                     //Ha fallado al cargar una faceta, pero sigo con el resto
-                    mUtilServicios.EnviarErrorYGuardarLog("Error: " + ex.Message + "\r\nPila: " + ex.StackTrace, "errorFaceta", mEsBot);
+                    mUtilServicios.EnviarErrorYGuardarLog($"Error: {ex.Message}\r\nPila: {ex.StackTrace}", "errorFaceta", mEsBot);
                 }
             }
 
@@ -3119,11 +2999,11 @@ namespace ServicioCargaFacetas
                 {
                     if (mFiltroContextoNombre.Length > 50)
                     {
-                        listaFiltrosDevolver.Add(AgregarElementoAFaceta("contexto", "<span title=\"" + mFiltroContextoNombre + "\">" + mFiltroContextoNombre.Substring(0, 50) + "...</span>", mFiltroContextoNombre, -1, true, true, TiposAlgoritmoTransformacion.Ninguno));
+                        listaFiltrosDevolver.Add(AgregarElementoAFaceta("contexto", $"<span title=\"{mFiltroContextoNombre}\">{mFiltroContextoNombre.Substring(0, 50)}...</span>", mFiltroContextoNombre, -1, true, true, TiposAlgoritmoTransformacion.Ninguno));
                     }
                     else
                     {
-                        listaFiltrosDevolver.Add(AgregarElementoAFaceta("contexto", "<span title='prueba'>" + mFiltroContextoNombre + "</span>", mFiltroContextoNombre, -1, true, true, TiposAlgoritmoTransformacion.Ninguno));
+                        listaFiltrosDevolver.Add(AgregarElementoAFaceta("contexto", $"<span title='prueba'>{mFiltroContextoNombre}</span>", mFiltroContextoNombre, -1, true, true, TiposAlgoritmoTransformacion.Ninguno));
                     }
                 }
 
@@ -3136,15 +3016,6 @@ namespace ServicioCargaFacetas
                     pintarFiltroQueNoSeaTesauroSemantico = pintarFiltroQueNoSeaTesauroSemantico || (!(GestorFacetasOriginal.ListaFacetasPorClave[clave].FilaElementoEntity is FacetaFiltroProyecto) && !(GestorFacetasOriginal.ListaFacetasPorClave[clave].FilaElementoEntity is FacetaFiltroHome) && GestorFacetasOriginal.ListaFacetasPorClave[clave].AlgoritmoTransformacion != TiposAlgoritmoTransformacion.TesauroSemantico && GestorFacetasOriginal.ListaFacetasPorClave[clave].AlgoritmoTransformacion != TiposAlgoritmoTransformacion.TesauroSemanticoOrdenado);
 
                     pintarFiltroQueNoSeaTesauroSemantico = pintarFiltroQueNoSeaTesauroSemantico || ((GestorFacetasOriginal.ListaFacetasPorClave[clave].FilaElementoEntity is FacetaFiltroProyecto || GestorFacetasOriginal.ListaFacetasPorClave[clave].FilaElementoEntity is FacetaFiltroHome) && GestorFacetasOriginal.ListaFacetasPorClave[clave].FiltroProyectoID.Split(';')[0].Trim() != "" && !GestorFacetasOriginal.ListaFacetasPorClave[clave].FiltroProyectoID.Split(';')[0].Contains("-"));
-
-                    //Probleams con los filtros.
-                    //bool pintarFiltroQueNoSeaTesauroSemantico = !GestorFacetas.ListaFacetasPorClave.ContainsKey(clave);
-                    /*pintarFiltroQueNoSeaTesauroSemantico = pintarFiltroQueNoSeaTesauroSemantico || (GestorFacetas.ListaFacetasPorClave[clave].AlgoritmoTransformacion != TiposAlgoritmoTransformacion.TesauroSemantico && GestorFacetas.ListaFacetasPorClave[clave].AlgoritmoTransformacion != TiposAlgoritmoTransformacion.TesauroSemanticoOrdenado);
-
-                    //Problema nombre filtro Tesauro Semántico
-                    pintarFiltroQueNoSeaTesauroSemantico = pintarFiltroQueNoSeaTesauroSemantico || (!(GestorFacetas.ListaFacetasPorClave[clave].FilaElemento is FacetaDS.FacetaFiltroProyectoRow) && !(GestorFacetas.ListaFacetasPorClave[clave].FilaElemento is FacetaDS.FacetaFiltroHomeRow) && GestorFacetas.ListaFacetasPorClave[clave].AlgoritmoTransformacion != TiposAlgoritmoTransformacion.TesauroSemantico && GestorFacetas.ListaFacetasPorClave[clave].AlgoritmoTransformacion != TiposAlgoritmoTransformacion.TesauroSemanticoOrdenado);
-
-                    pintarFiltroQueNoSeaTesauroSemantico = pintarFiltroQueNoSeaTesauroSemantico || ((GestorFacetas.ListaFacetasPorClave[clave].FilaElemento is FacetaDS.FacetaFiltroProyectoRow || GestorFacetas.ListaFacetasPorClave[clave].FilaElemento is FacetaDS.FacetaFiltroHomeRow) && GestorFacetas.ListaFacetasPorClave[clave].FiltroProyectoID.Split(';')[0].Trim() != "" && !GestorFacetas.ListaFacetasPorClave[clave].FiltroProyectoID.Split(';')[0].Contains("-"));*/
 
                     if (pintarFiltroQueNoSeaTesauroSemantico)
                     {
@@ -3232,8 +3103,6 @@ namespace ServicioCargaFacetas
 
                         #endregion
 
-
-                        //if (GestorFacetas.ListaFacetasPorClave[clave].FilaElemento is FacetaDS.FacetaFiltroProyectoRow)
                         if (GestorFacetasOriginal.ListaFacetasPorClave[clave].FilaElementoEntity is FacetaFiltroProyecto)
                         {
                             int numElem = 0;
@@ -3245,10 +3114,8 @@ namespace ServicioCargaFacetas
                                     parametro = pListaFiltros[clave][numElem++];
 
                                     string valorReal = ObtenerPropTesSem(TesauroSemDSFaceta[clave], arrayTesSem[3], valor);
-                                    //if (GestorFacetas.ListaFacetasPorClave.ContainsKey(clave))
                                     if (GestorFacetasOriginal.ListaFacetasPorClave.ContainsKey(clave))
                                     {
-                                        //listaFiltrosDevolver.Add(AgregarElementoAFaceta(clave, valorReal, parametro, -1, true, false, GestorFacetas.ListaFacetasPorClave[clave].AlgoritmoTransformacion));
                                         listaFiltrosDevolver.Add(AgregarElementoAFaceta(clave, valorReal, parametro, -1, true, false, GestorFacetasOriginal.ListaFacetasPorClave[clave].AlgoritmoTransformacion));
                                     }
                                     else
@@ -3287,7 +3154,7 @@ namespace ServicioCargaFacetas
                                         }
                                         else
                                         {
-                                            nombreFacetaUnida += valorReal + " > ";
+                                            nombreFacetaUnida += $"{valorReal} > ";
                                         }
                                     }
                                 }
@@ -3305,7 +3172,6 @@ namespace ServicioCargaFacetas
                                 {
                                     listaFiltrosDevolver.Add(AgregarElementoAFaceta(clave, nombreFacetaUnida, parametro, -1, true, false, TiposAlgoritmoTransformacion.Ninguno));
                                 }
-
                             }
                         }
                     }
@@ -3314,6 +3180,7 @@ namespace ServicioCargaFacetas
 
             return new KeyValuePair<List<FacetModel>, List<FacetItemModel>>(listaFacetasDevolver, listaFiltrosDevolver);
         }
+
         [NonAction]
         private Dictionary<string, List<string>> EliminarFiltrosDeListaFiltros(Dictionary<string, List<string>> pListaFiltros, Dictionary<string, List<string>> pListaFiltrosEliminar)
         {
@@ -3341,11 +3208,13 @@ namespace ServicioCargaFacetas
 
             return listaFiltrosNuevos;
         }
+
         [NonAction]
         private void ObtenerTituloFacetasHilo(string pProyectoID, FacetadoDS pFacetadoDS, Dictionary<string, List<string>> pListaFiltros, List<string> pListaFiltrosExtra, bool pEstaEnMyGnoss, bool pEsMiembroComunidad, bool pEsInvitado, string pIdentidadID, int pInicio, int pLimite, List<string> pSemanticos, string pFiltroContextoWhere, TipoProyecto pTipoProyecto, List<int> pListaRangos, bool pUsarHilos, bool pExcluirPersonas, bool pPermitirRecursosPrivados, bool pOmitirPalabrasNoRelevantesSearch, Dictionary<string, Tuple<string, string, string, bool>> pFiltrosSearchPersonalizados, Dictionary<string, int> pListaFacetas, Dictionary<string, string> pListaFacetasExtraContexto)
         {
             mFacetadoCL.ObtenerTituloFacetas(mGrafoID, pFacetadoDS, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), 0, 100, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, null, false, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, FiltrosSearchPersonalizados, pListaFacetas, pListaFacetasExtraContexto);
         }
+
         [NonAction]
         private void ObtenerFacetasPlegadas(Dictionary<string, int> pListaFacetasPlegadas, Dictionary<string, string> pListaFacetasPlegadasExtraContexto, bool pExcluirPersonas, bool pPermitirRecursosPrivados, bool pOmitirPalabrasNoRelevantesSearch)
         {
@@ -3416,7 +3285,6 @@ namespace ServicioCargaFacetas
                             mFacetadoDS.Tables["Facetas"].ImportRow(filaFaceta);
                         }
                     }
-                    //mFacetadoDS.Merge(facetadoDS);
                     facetadoDS.Dispose();
                 }
             }
@@ -3434,6 +3302,7 @@ namespace ServicioCargaFacetas
                 }
             }
         }
+
         [NonAction]
         private string ObtenerExtraContextoTesauroSemantico(Faceta pFaceta)
         {
@@ -3442,7 +3311,7 @@ namespace ServicioCargaFacetas
             {
                 string[] arrayTesSem = ObtenerDatosFacetaTesSem(pFaceta.ClaveFaceta);
 
-                extraContexto = "AgreAFiltro=" + pFaceta.ClaveFaceta + ",";
+                extraContexto = $"AgreAFiltro={pFaceta.ClaveFaceta},";
 
                 string nivelSemantico = null;
                 string source = null;
@@ -3467,15 +3336,15 @@ namespace ServicioCargaFacetas
 
                         if (idioma != null)
                         {
-                            filtroIdioma = " AND lang(@o@)='" + idioma + "'";
+                            filtroIdioma = $" AND lang(@o@)='{idioma}'";
                         }
 
                         if (!string.IsNullOrEmpty(source))
                         {
-                            extraContexto += " @s@ <" + arrayTesSem[5] + "> \"" + source + "\".";
+                            extraContexto += $" @s@ <{arrayTesSem[5]}> \"{source}\".";
                         }
 
-                        extraContexto += " @s@ <" + arrayTesSem[6] + "> ?nivelTesSem. FILTER(?nivelTesSem=" + nivelSemantico + "" + filtroIdioma + ") ";
+                        extraContexto += $" @s@ <{arrayTesSem[6]}> ?nivelTesSem. FILTER(?nivelTesSem={nivelSemantico}{filtroIdioma}) ";
                     }
                     else
                     {
@@ -3484,7 +3353,7 @@ namespace ServicioCargaFacetas
 
                         if (!string.IsNullOrEmpty(source))
                         {
-                            extraContexto += "@o@ <" + arrayTesSem[5] + "> \"" + source + "\". ";
+                            extraContexto += $"@o@ <{arrayTesSem[5]}> \"{source}\". ";
                         }
 
                         extraContexto += "{";
@@ -3497,44 +3366,17 @@ namespace ServicioCargaFacetas
                         {
                             extraContexto += $"@o@ <{arrayTesSem[6]}> ?nivelTesSem. FILTER(?nivelTesSem >= {inicioRangoNivel} AND ?nivelTesSem <= {finRangoNivel})}}";
                         }
-
-                        /*for (int iInicio = inicioRangoNivel; iInicio <= finRangoNivel; iInicio++)
-                        {
-                            if (iInicio == inicioRangoNivel)
-                            {
-                                extraContexto += "@o@ <" + arrayTesSem[6] + "> ?nivelTesSem. FILTER(?nivelTesSem in(" + iInicio;
-                            }
-                            else
-                            {
-                                extraContexto += "," + iInicio;
-                            }
-                            if (iInicio == finRangoNivel)
-                            {
-                                extraContexto += " ))} ";
-                            }
-
-                            //En la versión MVC se ha cambiado lo de abajo por lo de arriba (se han sustituido unions por in)
-                            //extraContexto += "@o@ <" + arrayTesSem[6] + "> ?nivelTesSem. FILTER(?nivelTesSem=" + iInicio + ")";
-                            //if (iInicio < finRangoNivel)
-                            //{
-                            //    extraContexto += " } UNION { ";
-                            //}
-                            //else
-                            //{
-                            //    extraContexto += " } ";
-                            //}
-                        }*/
                     }
                 }
                 else if (!mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
                 {
                     if (string.IsNullOrEmpty(source))
                     {
-                        extraContexto += "{?sujCollTaxo <" + arrayTesSem[1] + "> ";
+                        extraContexto += $"{{?sujCollTaxo <{arrayTesSem[1]}> ";
                     }
                     else
                     {
-                        extraContexto += "?sujCollTaxo <" + arrayTesSem[1] + "> @o@. @o@ <" + arrayTesSem[5] + "> \"" + source + "\".";
+                        extraContexto += $"?sujCollTaxo <{arrayTesSem[1]}> @o@. @o@ <{arrayTesSem[5]}> \"{source}\".";
                     }
                 }
                 else
@@ -3542,11 +3384,11 @@ namespace ServicioCargaFacetas
                     string catPadre = mListaFiltros[pFaceta.ClaveFaceta][mListaFiltros[pFaceta.ClaveFaceta].Count - 1];
                     if (string.IsNullOrEmpty(source))
                     {
-                        extraContexto += "{<" + catPadre + "> <" + arrayTesSem[4] + "> ";
+                        extraContexto += $"{{<{catPadre}> <{arrayTesSem[4]}> ";
                     }
                     else
                     {
-                        extraContexto += "<" + catPadre + "> <" + arrayTesSem[4] + "> @o@. @o@ <" + arrayTesSem[5] + "> \"" + source + "\".";
+                        extraContexto += $"<{catPadre}> <{arrayTesSem[4]}> @o@. @o@ <{arrayTesSem[5]}> \"{source}\".";
                     }
                 }
 
@@ -3559,12 +3401,13 @@ namespace ServicioCargaFacetas
             }
             else if (pFaceta != null && pFaceta.AlgoritmoTransformacion == TiposAlgoritmoTransformacion.MultiIdioma)
             {
-                extraContexto = "idioma=" + UtilIdiomas.LanguageCode + "|";
+                extraContexto = $"idioma={UtilIdiomas.LanguageCode}|";
                 mFiltroContextoWhere = extraContexto + mFiltroContextoWhere;
             }
 
             return extraContexto;
         }
+
         [NonAction]
         private void AjusteInicioFinFacetasConfigurado(int pNumeroFacetas, out int inicio, out int fin, List<Faceta> pListaFacetas)
         {
@@ -3576,12 +3419,12 @@ namespace ServicioCargaFacetas
 
             if (mParametroProyecto.ContainsKey(ParametroAD.NumeroFacetasPrimeraPeticion))
             {
-                Int32.TryParse(mParametroProyecto[ParametroAD.NumeroFacetasPrimeraPeticion], out numFacetasPrimeraPeticion);
+                int.TryParse(mParametroProyecto[ParametroAD.NumeroFacetasPrimeraPeticion], out numFacetasPrimeraPeticion);
             }
 
             if (mParametroProyecto.ContainsKey(ParametroAD.NumeroFacetasSegundaPeticion))
             {
-                Int32.TryParse(mParametroProyecto[ParametroAD.NumeroFacetasSegundaPeticion], out numFacetasSegundaPeticion);
+                int.TryParse(mParametroProyecto[ParametroAD.NumeroFacetasSegundaPeticion], out numFacetasSegundaPeticion);
             }
 
             if (pNumeroFacetas.Equals(1))
@@ -3609,7 +3452,6 @@ namespace ServicioCargaFacetas
             if (!GruposPorTipo)
             {
                 //Si no se agrupa por tipos se traen normalmente
-
                 if (pNumeroFacetas < 2 || pNumeroFacetas > pListaFacetas.Count)
                 {
                     fin = pListaFacetas.Count;
@@ -3667,7 +3509,6 @@ namespace ServicioCargaFacetas
                     else if (pNumeroFacetas == 3)
                     {
                         inicio = 4;
-                        //fin = mConfiguracionDS.Tables["TablaConfiguracion"].Rows.Count;
                         fin = pListaFacetas.Count;
 
                         int inicioAnt = 2;
@@ -3714,6 +3555,7 @@ namespace ServicioCargaFacetas
                 AjustarFacetasAgrupadas(pNumeroFacetas, out inicio, out fin, ref pListaFacetas);
             }
         }
+
         [NonAction]
         private void EliminarFacetasNoAplicables(int pNumeroFacetas, string pTipoBusqueda, FacetadoDS pFacetadoComprobacionRdfTypeDS)
         {//Eliminar solo de memoria
@@ -3836,7 +3678,7 @@ namespace ServicioCargaFacetas
                 if ((FilaPestanyaBusquedaActual != null && GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyectoPenstanya.Any(item => item.PestanyaID.Equals(FilaPestanyaBusquedaActual.PestanyaID))) || (mPestanyaActualID != Guid.Empty && GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyectoPenstanya.Any(item => item.PestanyaID.Equals(mPestanyaActualID))))
                 {
                     Guid pestanyaIDaBuscar = FilaPestanyaBusquedaActual != null ? FilaPestanyaBusquedaActual.PestanyaID : mPestanyaActualID;
-                    
+
                     try
                     {
                         Dictionary<string, List<string>> listObjetosConocimiento = new Dictionary<string, List<string>>();
@@ -3881,51 +3723,6 @@ namespace ServicioCargaFacetas
                         throw;
                     }
                 }
-                //if (FilaPestanyaBusquedaActual != null)
-                //{
-                //    foreach (FacetaObjetoConocimientoProyectoPestanya filaFacObjConProPes in GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyectoPenstanya.Where(item => !item.PestanyaID.Equals(FilaPestanyaBusquedaActual.PestanyaID)))
-                //    {
-                //        // Borrar las facetas configuradas por pestanya del resto de datasets. ¡Hacerla exclusiva!
-                //        string query = "ObjetoConocimiento = '" + filaFacObjConProPes.ObjetoConocimiento + "'";
-                //        query += " AND Faceta = '" + filaFacObjConProPes.Faceta + "'";
-
-                //        List<FacetaFiltroHome> listaFacetaFiltroHome = GestorFacetas.FacetasDW.ListaFacetaFiltroHome.Where(item => item.ObjetoConocimiento.Equals(filaFacObjConProPes.ObjetoConocimiento) && item.Faceta.Equals(filaFacObjConProPes.Faceta)).ToList();
-                //        List<FacetaHome> listaFacetaHome = GestorFacetas.FacetasDW.ListaFacetaHome.Where(item => item.ObjetoConocimiento.Equals(filaFacObjConProPes.ObjetoConocimiento) && item.Faceta.Equals(filaFacObjConProPes.Faceta)).ToList();
-
-                //        // Borrar si no existe para la pestanya actual
-
-                //        List<FacetaObjetoConocimiento> listaFacetaObjetoConocimiento = new List<FacetaObjetoConocimiento>();
-                //        List<FacetaObjetoConocimientoProyecto> listaFacetaObjetoConocimientoProyectoBorrar = new List<FacetaObjetoConocimientoProyecto>();
-                //        List<FacetaFiltroProyecto> listaFacetaFiltroProyectoBorrar = new List<FacetaFiltroProyecto>();
-
-                //        listaFacetaObjetoConocimiento = GestorFacetas.FacetasDW.ListaFacetaObjetoConocimiento.Where(item => !item.ObjetoConocimiento.Equals(filaFacObjConProPes.ObjetoConocimiento) && item.Faceta.Equals(filaFacObjConProPes.Faceta)).ToList();
-                //        listaFacetaObjetoConocimientoProyectoBorrar = GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyecto.Where(item => !item.ObjetoConocimiento.Equals(filaFacObjConProPes.ObjetoConocimiento) && item.Faceta.Equals(filaFacObjConProPes.Faceta)).ToList();
-                //        listaFacetaFiltroProyectoBorrar = GestorFacetas.FacetasDW.ListaFacetaFiltroProyecto.Where(item => !item.ObjetoConocimiento.Equals(filaFacObjConProPes.ObjetoConocimiento) && item.Faceta.Equals(filaFacObjConProPes.Faceta)).ToList();
-
-                //        foreach (FacetaObjetoConocimiento filaObjConProy in listaFacetaObjetoConocimiento)
-                //        {
-                //            GestorFacetas.FacetasDW.ListaFacetaObjetoConocimiento.Remove(filaObjConProy);
-                //        }
-
-                //        foreach (FacetaObjetoConocimientoProyecto filaObjConProy in listaFacetaObjetoConocimientoProyectoBorrar)
-                //        {
-                //            if (filaObjConProy.Reciproca == 0)
-                //            {
-                //                GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyecto.Remove(filaObjConProy);
-                //            }
-                //        }
-
-                //        foreach (FacetaFiltroProyecto filaFiltroProy in listaFacetaFiltroProyectoBorrar)
-                //        {
-                //            GestorFacetas.FacetasDW.ListaFacetaFiltroProyecto.Remove(filaFiltroProy);
-                //        }
-
-                //        if (GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyectoPenstanya.Any(item => item.PestanyaID.Equals(FilaPestanyaBusquedaActual.PestanyaID) && item.ObjetoConocimiento.Equals(filaFacObjConProPes.ObjetoConocimiento) && item.Faceta.Equals(filaFacObjConProPes.Faceta)))
-                //        {
-                //            MarcarFilasBorradasDataSet(listaFacetaFiltroHome, listaFacetaHome);
-                //        }
-                //    }
-                //}
 
                 var listaFiltrosComprobar = mListaFiltros;
                 List<FacetaObjetoConocimientoProyecto> listaFacetaObjetoConocimientoProyecto = GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyecto.Where(item => !string.IsNullOrEmpty(item.Condicion)).ToList();
@@ -3945,10 +3742,10 @@ namespace ServicioCargaFacetas
                         //    }
                         //}
 
-                        List<Es.Riam.Gnoss.AD.EntityModel.Models.Faceta.FacetaFiltroProyecto> filasFacetas = filaObjCon.FacetaFiltroProyecto.ToList();
+                        List<FacetaFiltroProyecto> filasFacetas = GestorFacetas.FacetasDW.ListaFacetaFiltroProyecto.Where(item => item.Faceta.Equals(filaObjCon.Faceta) && item.ObjetoConocimiento.Equals(filaObjCon.ObjetoConocimiento)).ToList();
                         if (filasFacetas != null && filasFacetas.Count > 0)
                         {
-                            foreach (Es.Riam.Gnoss.AD.EntityModel.Models.Faceta.FacetaFiltroProyecto filaFacetas in filasFacetas)
+                            foreach (FacetaFiltroProyecto filaFacetas in filasFacetas)
                             {
                                 filaObjCon.FacetaFiltroProyecto.Remove(filaFacetas);
                             }
@@ -4024,7 +3821,7 @@ namespace ServicioCargaFacetas
                     {
 
                         string tipo = dr[0].ToString();
-                        select += "ObjetoConocimiento <> '" + tipo + "' AND ";
+                        select += $"ObjetoConocimiento <> '{tipo}' AND ";
                         listaTipos.Add(tipo.ToLower());
                     }
 
@@ -4059,8 +3856,6 @@ namespace ServicioCargaFacetas
                         listaFacetaObjetoConocimientoProyectoBorrar = GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyecto.Where(facObjCon => facObjCon.ObjetoConocimiento.ToLower() != "recurso").ToList();
                         listaFacetaFiltroProyectoBorrar = GestorFacetas.FacetasDW.ListaFacetaFiltroProyecto.Where(facObjCon => facObjCon.ObjetoConocimiento.ToLower() != "recurso").ToList();
                     }
-
-
 
                     //Los recursos son la clase básica y si se eliminan hay facetas como el rdf:type que no se pintan.
                     select += " ObjetoConocimiento <> 'Recurso'";
@@ -4153,10 +3948,10 @@ namespace ServicioCargaFacetas
                 }
             }
         }
+
         [NonAction]
         private bool ComprobarCondicionEnFiltro(string pCondicion, FacetadoDS pFacetadoComprobacionRdfTypeDS)
         {
-
             bool factCorrecta = false;
 
             string[] condiciones = pCondicion.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
@@ -4178,7 +3973,6 @@ namespace ServicioCargaFacetas
 
                         if (listaFiltrosComprobar != null && listaFiltrosComprobar.ContainsKey(propiedad))
                         {
-                            //pFacetadoComprobacionRdfTypeDS.Tables["rdf:type"].Rows[0][0]
                             foreach (string valorFiltro in listaFiltrosComprobar[propiedad])
                             {
                                 if (propiedad.EndsWith(FacetaAD.Faceta_Gnoss_SubType))
@@ -4326,8 +4120,6 @@ namespace ServicioCargaFacetas
             mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, false, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, TipoPropiedadFaceta.FechaMinMax, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
         }
 
-
-
         [NonAction]
         private void ObtenerDeVirtuosoRangoFechas(string pClaveFaceta, Dictionary<string, List<string>> pListaFiltros, Faceta pFaceta, bool pOmitirPalabrasNoRelevantesSearch, bool pPermitirRecursosPrivados, bool pInmutable, bool pEsMovil)
         {
@@ -4415,6 +4207,7 @@ namespace ServicioCargaFacetas
             mFacetadoDS.Tables[pClaveFaceta].Clear();
             mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, false, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, TipoPropiedadFaceta.FechaMeses, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
         }
+
         [NonAction]
         private void ObtenerDeVirtuosoRangoSiglos(string pClaveFaceta, Dictionary<string, List<string>> pListaFiltros, Faceta pFaceta, bool pOmitirPalabrasNoRelevantesSearch, int pNumElementosVisibles, bool pPermitirRecursosPrivados, bool pInmutable, bool pEsMovil)
         {
@@ -4485,6 +4278,7 @@ namespace ServicioCargaFacetas
                 }
             }
         }
+
         [NonAction]
         private List<int> ObtenerListaAnios(FacetadoDS pFacetadoDSRangos, string pNombreFaceta, bool pNegativo)
         {
@@ -4506,6 +4300,7 @@ namespace ServicioCargaFacetas
 
             return listaAniosOrdenados;
         }
+
         [NonAction]
         private void ObtenerDeVirtuosoRangoCalendario(string pClaveFaceta, Faceta pFaceta, bool pPermitirRecursosPrivados, bool pInmutable, bool pEsMovil)
         {
@@ -4577,21 +4372,6 @@ namespace ServicioCargaFacetas
             }
 
             bool usarHilos = false;
-
-            //FacetadoCN facCN = new FacetadoCN(mUtilServicios.UrlIntragnoss, mEntityContext, mLoggingService, mConfigService, mVirtuosoAD);
-
-            //if (mProyectoID != ProyectoAD.MetaProyecto)
-            //{
-            //    facCN.ListaItemsBusquedaExtra = mListaItemsBusquedaExtra;
-            //    facCN.InformacionOntologias = InformacionOntologias;
-            //    facCN.PropiedadesRango = mUtilServiciosFacetas.ObtenerPropiedadesRango(GestorFacetas);
-            //    facCN.PropiedadesFecha = mUtilServiciosFacetas.ObtenerPropiedadesFecha(GestorFacetas);
-            //    facCN.ListaComunidadesPrivadasUsuario = new List<Guid>();
-            //    facCN.FacetadoAD.UsuarioTieneRecursosPrivados = mFacetadoCL.FacetadoCN.FacetadoAD.UsuarioTieneRecursosPrivados;
-            //}
-
-            //FacetadoDS facetadoDSRangos = new FacetadoDS();
-            //facCN.ObtenerContadoresRecursosAgrupadosParaFacetaRangos(mGrafoID, facetadoDSRangos, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
 
             FacetadoDS facetadoDSRangos = new FacetadoDS();
             mFacetadoCL.FacetadoCN.ObtenerContadoresRecursosAgrupadosParaFacetaRangos(mGrafoID, facetadoDSRangos, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
@@ -4739,6 +4519,7 @@ namespace ServicioCargaFacetas
             //    facCN.Dispose();
             //}
         }
+
         [NonAction]
         private string CompilarConsultaFacetaMultiple(FacetaMultiple pFilaFacetaMultiple)
         {
@@ -4757,7 +4538,6 @@ namespace ServicioCargaFacetas
                 {
                     string filtro = clausulaIf.Substring(CLAUSULA_EXIST_FILTER.Length).Trim(' ', '(', ')', '\"');
 
-
                     if (mListaFiltros.ContainsKey(filtro))
                     {
                         // El filtro existe, el contenido del if debe formar parte de la consulta
@@ -4770,7 +4550,6 @@ namespace ServicioCargaFacetas
                         consulta = consulta.Remove(indiceClausulaIF, consulta.IndexOf(CLAUSULA_ENDIF) + CLAUSULA_ENDIF.Length - indiceClausulaIF);
                     }
                 }
-
 
                 indiceClausulaIF = consulta.IndexOf(CLAUSULA_IF);
             }
@@ -4810,6 +4589,7 @@ namespace ServicioCargaFacetas
 
             return dt;
         }
+
         [NonAction]
         private Dictionary<string, double> ObtenerDiccionarioRangosDesdeDS(FacetadoDS facetadoDSRangos, string pClaveFaceta)
         {
@@ -4885,6 +4665,7 @@ namespace ServicioCargaFacetas
 
             return dicDesdeDS;
         }
+
         [NonAction]
         private Dictionary<string, double> AgruparFilasConMenosResultadosDelTotal(Dictionary<string, double> pDicRangos, Dictionary<string, double> pDicSubRangos, IEnumerable<KeyValuePair<string, double>> pDicRangosSuperanValor)
         {
@@ -4935,6 +4716,7 @@ namespace ServicioCargaFacetas
 
             return pDicRangos;
         }
+
         [NonAction]
         private KeyValuePair<string, double> ObtenerElementoDeDiccionario(Dictionary<string, double> pDicRangos, int pPosicionElemento)
         {
@@ -4946,6 +4728,7 @@ namespace ServicioCargaFacetas
 
             return elementoDiccionario;
         }
+
         [NonAction]
         private KeyValuePair<string, double> AgrupoRangoConValoresMenoresAlTotal(KeyValuePair<string, double> pDrRangosNoSuperanPorcentajeMinimo, KeyValuePair<string, double> pPreviousDataRow, KeyValuePair<string, double> pNextDataRow, Dictionary<string, double> pDicSubRangos, IEnumerable<KeyValuePair<string, double>> pDicRangosSuperanValor)
         {
@@ -4956,14 +4739,14 @@ namespace ServicioCargaFacetas
                 if (pPreviousDataRow.Value <= pNextDataRow.Value)
                 {
                     pPreviousDataRow = ObtenerSubrangoRelacionado(true, pPreviousDataRow, pDicRangosSuperanValor, pDicSubRangos);
-                    string indice = pPreviousDataRow.Key + "-" + pDrRangosNoSuperanPorcentajeMinimo.Key;
+                    string indice = $"{pPreviousDataRow.Key}-{pDrRangosNoSuperanPorcentajeMinimo.Key}";
                     double sumaResultados = pPreviousDataRow.Value + pDrRangosNoSuperanPorcentajeMinimo.Value;
                     resultadoFinal = new KeyValuePair<string, double>(indice, sumaResultados);
                 }
                 else
                 {
                     pNextDataRow = ObtenerSubrangoRelacionado(false, pNextDataRow, pDicRangosSuperanValor, pDicSubRangos);
-                    string indice = pNextDataRow.Key + "-" + pDrRangosNoSuperanPorcentajeMinimo.Key;
+                    string indice = $"{pNextDataRow.Key}-{pDrRangosNoSuperanPorcentajeMinimo.Key}";
                     double sumaResultados = pNextDataRow.Value + pDrRangosNoSuperanPorcentajeMinimo.Value;
                     resultadoFinal = new KeyValuePair<string, double>(indice, sumaResultados);
                 }
@@ -4971,20 +4754,21 @@ namespace ServicioCargaFacetas
             else if (pPreviousDataRow.Key == null)
             {
                 pNextDataRow = ObtenerSubrangoRelacionado(false, pNextDataRow, pDicRangosSuperanValor, pDicSubRangos);
-                string indice = pDrRangosNoSuperanPorcentajeMinimo.Key + "-" + pNextDataRow.Key;
+                string indice = $"{pDrRangosNoSuperanPorcentajeMinimo.Key}-{pNextDataRow.Key}";
                 double sumaResultados = pNextDataRow.Value + pDrRangosNoSuperanPorcentajeMinimo.Value;
                 resultadoFinal = new KeyValuePair<string, double>(indice, sumaResultados);
             }
             else if (pNextDataRow.Key == null)
             {
                 pPreviousDataRow = ObtenerSubrangoRelacionado(true, pPreviousDataRow, pDicRangosSuperanValor, pDicSubRangos);
-                string indice = pPreviousDataRow.Key + "-" + pDrRangosNoSuperanPorcentajeMinimo.Key;
+                string indice = $"{pPreviousDataRow.Key}-{pDrRangosNoSuperanPorcentajeMinimo.Key}";
                 double sumaResultados = pPreviousDataRow.Value + pDrRangosNoSuperanPorcentajeMinimo.Value;
                 resultadoFinal = new KeyValuePair<string, double>(indice, sumaResultados);
             }
 
             return resultadoFinal;
         }
+
         [NonAction]
         private KeyValuePair<string, double> ObtenerSubrangoRelacionado(bool pMayor, KeyValuePair<string, double> pDataRow, IEnumerable<KeyValuePair<string, double>> pDicRangosSuperanValor, Dictionary<string, double> pDicSubRangos)
         {
@@ -5027,6 +4811,7 @@ namespace ServicioCargaFacetas
 
             return pDataRow;
         }
+
         [NonAction]
         private void ObtenerEnterosMayorMenorDelKeyDeKeyValuePair(KeyValuePair<string, double> pDataRow, out int mayor, out int menor)
         {
@@ -5041,6 +4826,7 @@ namespace ServicioCargaFacetas
                 mayor = int.Parse(values[1]);
             }
         }
+
         [NonAction]
         private Dictionary<string, double> LimpiarRangosFusionadosDiccionario(Dictionary<string, double> pDicRangos)
         {
@@ -5065,7 +4851,7 @@ namespace ServicioCargaFacetas
                 {
                     double menorValorRango = rangosEnterosDivididos.Min();
                     double mayorValorRango = rangosEnterosDivididos.Max();
-                    finalRangos.Add(menorValorRango + "-" + mayorValorRango, pDicRangos[rango]);
+                    finalRangos.Add($"{menorValorRango}-{mayorValorRango}", pDicRangos[rango]);
                 }
                 else
                 {
@@ -5075,6 +4861,7 @@ namespace ServicioCargaFacetas
 
             return finalRangos;
         }
+
         [NonAction]
         private Dictionary<string, double> FusionarSubRangosConRangosOriginales(Dictionary<string, double> pDicRangos, Dictionary<string, double> pDicSubRangos)
         {
@@ -5102,6 +4889,7 @@ namespace ServicioCargaFacetas
 
             return finalDicRangos;
         }
+
         [NonAction]
         private Dictionary<string, double> AgruparSubrangoPorMitades(Dictionary<string, double> pDicSubRangos, int pCantidadNumeros)
         {
@@ -5126,7 +4914,7 @@ namespace ServicioCargaFacetas
             }
 
 
-            string indiceAgrupado = primero + "-" + ultimoTemp;
+            string indiceAgrupado = $"{primero}-{ultimoTemp}";
             if (primero != ultimoTemp.ToString())
             {
                 if (!dicSubrangos.ContainsKey(indiceAgrupado))
@@ -5174,6 +4962,7 @@ namespace ServicioCargaFacetas
 
             return dicSubrangos;
         }
+
         [NonAction]
         private void ObtenerValoresFiltroSubRango(Dictionary<string, double> pDicSubRangos, bool pMenor, double pMitad, out string primero, out double ultimo, out double suma)
         {
@@ -5222,6 +5011,7 @@ namespace ServicioCargaFacetas
                 }
             }
         }
+
         [NonAction]
         private Dictionary<string, double> AgruparColumnasConFormatoRango(IEnumerable<KeyValuePair<string, double>> pDicSubRangos, int pNumCifrasCantidad)
         {
@@ -5251,13 +5041,13 @@ namespace ServicioCargaFacetas
 
             return dicValoresAgrupados;
         }
+
         [NonAction]
         private Dictionary<string, double> AgruparSubrangosCuandoHayMenosDeCinco(IEnumerable<KeyValuePair<string, double>> pDicSubRangos, double pMultiploDeDiez, int pNumCifrasCantidad)
         {
             Dictionary<string, double> dicValoresAgrupados = new Dictionary<string, double>();
 
             KeyValuePair<string, double> dicOrigen = new KeyValuePair<string, double>();
-            //foreach (DataRow dr in pFacetadoDSSubRangos.Tables[pClaveFaceta].Rows)
             for (int x = 0; x < pDicSubRangos.Count(); x++)
             {
                 if (dicOrigen.Key == null)
@@ -5289,20 +5079,19 @@ namespace ServicioCargaFacetas
                     //Obtengo rango de 9 a 9
                     double fin = pMultiploDeDiez * 10;
                     double cantidad = dicOrigen.Value;
-                    //double fin = -1;
                     dicValoresAgrupados.Add(ObtenerRangoValores(tempIndice, fin), cantidad);
                 }
             }
 
             return dicValoresAgrupados;
         }
+
         [NonAction]
         private Dictionary<string, double> AgruparSubrangosCuandoHayMasDeCinco(IEnumerable<KeyValuePair<string, double>> pDicSubRangos, double pMultiploDeDiez)
         {
 
             Dictionary<string, double> dicValoresAgrupados = new Dictionary<string, double>();
             KeyValuePair<string, double> dicOrigen = new KeyValuePair<string, double>();
-            //foreach (DataRow dr in pFacetadoDSSubRangos.Tables[pClaveFaceta].Rows)
             for (int x = 0; x < pDicSubRangos.Count(); x++)
             {
                 if (dicOrigen.Key == null)
@@ -5328,13 +5117,13 @@ namespace ServicioCargaFacetas
                     //Obtengo rango de 9 a 9
                     double fin = pMultiploDeDiez * 10;
                     double cantidad = dicOrigen.Value;
-                    //double fin = -1;
                     dicValoresAgrupados.Add(ObtenerRangoValores(tempIndice, fin), cantidad);
                 }
             }
 
             return dicValoresAgrupados;
         }
+
         [NonAction]
         private double ObtenerMultiploDeDiez(double pCantidadNum)
         {
@@ -5346,6 +5135,7 @@ namespace ServicioCargaFacetas
 
             return multiploDeDiez;
         }
+
         [NonAction]
         private string ObtenerRangoValores(double pPrimerValorDataRow, double pSegundoValorDataRow)
         {
@@ -5420,24 +5210,13 @@ namespace ServicioCargaFacetas
                     string organizaciones = GetText("COMMON", "ORGANIZACIONES");
                     string personas = GetText("COMMON", "PERSONAS");
                     string comunidades = GetText("COMMON", "COMUNIDADES");
-                    string profesor = GetText("CONFIGURACIONFACETADO", "PROFESOR");
 
                     string contribucionesEncuesta = GetText("CONFIGURACIONFACETADO", "CONTENCUESTA");
                     string contribucionesFD = GetText("CONFIGURACIONFACETADO", "CONTCOMFACTORDAFO");
                     string contribucionesDebates = GetText("CONFIGURACIONFACETADO", "CONTDEBATE");
                     string contribucionesPreguntas = GetText("CONFIGURACIONFACETADO", "CONTPREGUNTA");
-                    string contribucionesRecursos = GetText("CONFIGURACIONFACETADO", "CONTREC");
-                    string contribucionesComentarios = GetText("CONFIGURACIONFACETADO", "CONTCOMR");
                     string contribucionesRecComp = GetText("CONFIGURACIONFACETADO", "CONTRECCOMP");
                     string contribucionesRecPub = GetText("CONFIGURACIONFACETADO", "CONTRECPUB");
-                    string contribucionesComRec = GetText("CONFIGURACIONFACETADO", "CONTCOMREC");
-                    string contribucionesComFD = GetText("CONFIGURACIONFACETADO", "CONTCOMFD");
-                    string contribucionesComDeb = GetText("CONFIGURACIONFACETADO", "CONTCOMDEB");
-                    string contribucionesComPre = GetText("CONFIGURACIONFACETADO", "CONTCOMPRE");
-                    string contribucionesComEnc = GetText("CONFIGURACIONFACETADO", "CONTCOMEMC");
-                    string contribucionesComAB = GetText("CONFIGURACIONFACETADO", "CONTCOMAB");
-
-                    string grupos = GetText("CONTACTOS", "GRUPOS"); //contactos grupos
                     string contactos = GetText("CONTACTOS", "CONTACTOS"); //contactos grupos
 
                     if (((pElementosFaceta.ContainsKey(comunidadEducativa)) || (pElementosFaceta.ContainsKey(comunidadNoEducativa))) && ((!this.mListaFiltrosFacetasUsuario.ContainsKey(comunidadEducativa)) && (!mListaFiltrosFacetasUsuario.ContainsKey(comunidadNoEducativa))))
@@ -5508,8 +5287,7 @@ namespace ServicioCargaFacetas
                     if ((pElementosFaceta.ContainsKey(claseESO)) || (pElementosFaceta.ContainsKey(claseUni)))
                     {
                         //Personas y organizaciones
-
-                        if (this.mListaFiltrosFacetasUsuario.ContainsKey("rdf:type") && ((this.mListaFiltrosFacetasUsuario["rdf:type"].Contains(FacetadoAD.BUSQUEDA_CLASE_SECUNDARIA)) || (mListaFiltrosFacetasUsuario["rdf:type"].Contains(FacetadoAD.BUSQUEDA_CLASE_UNIVERSIDAD))))
+                        if (mListaFiltrosFacetasUsuario.ContainsKey("rdf:type") && ((this.mListaFiltrosFacetasUsuario["rdf:type"].Contains(FacetadoAD.BUSQUEDA_CLASE_SECUNDARIA)) || (mListaFiltrosFacetasUsuario["rdf:type"].Contains(FacetadoAD.BUSQUEDA_CLASE_UNIVERSIDAD))))
                         {
                             //Si el usuario ha hecho un filtro de algo específico, no se ordena la faceta
                             goto default;
@@ -5552,19 +5330,12 @@ namespace ServicioCargaFacetas
                         }
                     }
 
-                    if ((pElementosFaceta.ContainsKey(contribucionesRecPub)) || (pElementosFaceta.ContainsKey(contribucionesRecComp)))
+                    if (pElementosFaceta.ContainsKey(contribucionesRecPub) || pElementosFaceta.ContainsKey(contribucionesRecComp))
                     {
-                        if (this.mListaFiltrosFacetasUsuario.ContainsKey("rdf:type") && ((this.mListaFiltrosFacetasUsuario["rdf:type"].Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_COMPARTIDO)) || (mListaFiltrosFacetasUsuario["rdf:type"].Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_PUBLICADO))))
+                        if (mListaFiltrosFacetasUsuario.ContainsKey("rdf:type") && (mListaFiltrosFacetasUsuario["rdf:type"].Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_COMPARTIDO) || mListaFiltrosFacetasUsuario["rdf:type"].Contains(FacetadoAD.BUSQUEDA_CONTRIBUCIONES_PUBLICADO)))
                         {
                             goto default;
                         }
-
-                        //if (pElementosFaceta.ContainsKey(contribucionesRecursos))
-                        //{
-                        //    listaElementosOrdenados.Add(contribucionesRecursos, new List<string>());
-                        //    pParametrosElementos.Add(contribucionesRecursos, FacetadoAD.BUSQUEDA_CONTRIBUCIONES_RECURSOS);
-
-                        //}
 
                         if (pElementosFaceta.ContainsKey(contribucionesPreguntas))
                         {
@@ -5598,26 +5369,6 @@ namespace ServicioCargaFacetas
 
                         }
 
-
-
-                        // pElementosFaceta.Add(contribucionesRecursos, 0);
-                        //listaElementosOrdenados.Add(contribucionesRecursos, new List<string>());
-                        //if (pElementosFaceta.ContainsKey(contribucionesRecComp))
-                        //{
-                        //    listaElementosOrdenados[contribucionesRecursos].Add(contribucionesRecComp);
-
-
-                        //    pElementosFaceta[contribucionesRecursos] += pElementosFaceta[contribucionesRecComp];
-                        //}
-
-                        //if (pElementosFaceta.ContainsKey(contribucionesRecPub))
-                        //{
-                        //    listaElementosOrdenados[contribucionesRecursos].Add(contribucionesRecPub);
-
-                        //    pElementosFaceta[contribucionesRecursos] += pElementosFaceta[contribucionesRecPub];
-                        //}
-
-
                         if (pElementosFaceta.ContainsKey(contribucionesRecComp))
                         {
                             listaElementosOrdenados.Add(contribucionesRecComp, new List<string>());
@@ -5625,100 +5376,13 @@ namespace ServicioCargaFacetas
                                 pParametrosElementos.Add(contribucionesRecComp, FacetadoAD.BUSQUEDA_CONTRIBUCIONES_COMPARTIDO);
                         }
 
-
-
-
                         if (pElementosFaceta.ContainsKey(contribucionesRecPub))
                         {
                             listaElementosOrdenados.Add(contribucionesRecPub, new List<string>());
                             if (!pParametrosElementos.ContainsKey(contribucionesRecPub))
                                 pParametrosElementos.Add(contribucionesRecPub, FacetadoAD.BUSQUEDA_CONTRIBUCIONES_PUBLICADO);
                         }
-
-
-                        //if (pElementosFaceta.ContainsKey(contribucionesComentarios))
-                        //{
-                        //    listaElementosOrdenados.Add(contribucionesComentarios, new List<string>());
-                        //    pParametrosElementos.Add(contribucionesComentarios, FacetadoAD.BUSQUEDA_CONTRIBUCIONES_COMENTARIOS);
-                        //}
-
-                        //pElementosFaceta.Add(contribucionesComentarios, 0);
-                        //listaElementosOrdenados.Add(contribucionesComentarios, new List<string>());
-
-
-                        //if (pElementosFaceta.ContainsKey(contribucionesComRec))
-                        //{
-                        //    listaElementosOrdenados[contribucionesComentarios].Add(contribucionesComRec);
-
-                        //    pElementosFaceta[contribucionesComentarios] += pElementosFaceta[contribucionesComRec];
-                        //}
-
-
-
-                        //if (pElementosFaceta.ContainsKey(contribucionesComFD))
-                        //{
-                        //    listaElementosOrdenados[contribucionesComentarios].Add(contribucionesComFD);
-
-                        //    pElementosFaceta[contribucionesComentarios] += pElementosFaceta[contribucionesComFD];
-                        //}
-
-
-                        //if (pElementosFaceta.ContainsKey(contribucionesComDeb))
-                        //{
-                        //    listaElementosOrdenados[contribucionesComentarios].Add(contribucionesComDeb);
-
-                        //    pElementosFaceta[contribucionesComentarios] += pElementosFaceta[contribucionesComDeb];
-                        //}
-
-
-                        //if (pElementosFaceta.ContainsKey(contribucionesComPre))
-                        //{
-                        //    listaElementosOrdenados[contribucionesComentarios].Add(contribucionesComPre);
-
-                        //    pElementosFaceta[contribucionesComentarios] += pElementosFaceta[contribucionesComPre];
-                        //}
-
-
-                        //if (pElementosFaceta.ContainsKey(contribucionesComEnc))
-                        //{
-                        //    listaElementosOrdenados[contribucionesComentarios].Add(contribucionesComEnc);
-
-                        //    pElementosFaceta[contribucionesComentarios] += pElementosFaceta[contribucionesComEnc];
-                        //}
-
-
-                        //if (pElementosFaceta.ContainsKey(contribucionesComAB))
-                        //{
-                        //    listaElementosOrdenados[contribucionesComentarios].Add(contribucionesComAB);
-
-                        //    pElementosFaceta[contribucionesComentarios] += pElementosFaceta[contribucionesComAB];
-                        //}
-
-
                     }
-                    //if (mTipoBusqueda.Equals(TipoBusqueda.Contactos))
-                    //{
-
-                    //    if (pElementosFaceta.ContainsKey("Contactos"))
-                    //    {
-                    //        listaElementosOrdenados.Add(contactos, new List<string>());
-                    //    }
-
-                    //    if (pElementosFaceta.ContainsKey("Personas"))
-                    //    {
-                    //        listaElementosOrdenados.Add(personas, new List<string>());
-                    //    }
-
-                    //    if (pElementosFaceta.ContainsKey("Organizaciones"))
-                    //    {
-                    //        listaElementosOrdenados.Add(organizaciones, new List<string>());
-                    //    }
-
-                    //    if (pElementosFaceta.ContainsKey("Grupos"))
-                    //    {
-                    //        listaElementosOrdenados.Add(grupos, new List<string>());
-                    //    }
-                    //}
 
                     //El resto de tipos se quedan como vienen
                     foreach (string key in pElementosFaceta.Keys)
@@ -5738,6 +5402,7 @@ namespace ServicioCargaFacetas
                     }
                     break;
             }
+
             return listaElementosOrdenados;
         }
 
@@ -5781,12 +5446,12 @@ namespace ServicioCargaFacetas
 
                     if (dia != "00")
                     {
-                        fecha1 += dia + "/";
+                        fecha1 += $"{dia}/";
                     }
 
                     if (mes != "00")
                     {
-                        fecha1 += mes + "/";
+                        fecha1 += $"{mes}/";
                     }
 
                     if (anio != "0000")
@@ -5794,17 +5459,15 @@ namespace ServicioCargaFacetas
                         fecha1 += anio + "/";
                     }
 
-
                     if (fecha1.EndsWith("/"))
                     {
                         fecha1 = fecha1.Substring(0, fecha1.Length - 1);
                     }
 
-
                     if (pFiltro.StartsWith("-"))
                     {
-                        valor = "-" + valor;
-                        fecha1 = GetText("COMBUSQUEDAAVANZADA", "ANTERIORA") + " " + fecha1;
+                        valor = $"-{valor}";
+                        fecha1 = $"{GetText("COMBUSQUEDAAVANZADA", "ANTERIORA")} {fecha1}";
                     }
                     else
                     {
@@ -5868,7 +5531,7 @@ namespace ServicioCargaFacetas
                                 string mesSuperiorRango = ObtenerTextoRangoFecha(false, numeroMes);
                                 if (!fecha1.Contains(mesSuperiorRango))
                                 {
-                                    fecha1 += "-" + mesSuperiorRango;
+                                    fecha1 += $"-{mesSuperiorRango}";
                                 }
                             }
                             else if (dia.Equals("00"))
@@ -5940,7 +5603,6 @@ namespace ServicioCargaFacetas
                             nombreReal = GestorTesauro.ListaCategoriasTesauro[id].Nombre[UtilIdiomas.LanguageCode];
                         }
                         break;
-
                     case "sioc:has_space":
                     case "gnoss:hasComunidadOrigen":
                         if (mTipoBusqueda != TipoBusqueda.Suscripciones)
@@ -5969,7 +5631,6 @@ namespace ServicioCargaFacetas
                             }
                         }
                         break;
-
                     case "gnoss:hasnivelcertification"://nivel
                         if (pFiltro.Equals("100"))
                         {
@@ -5980,7 +5641,6 @@ namespace ServicioCargaFacetas
                             nombreReal = NivelesCertificacionDW.ListaNivelCertificacion.FirstOrDefault(nivel => nivel.Orden.ToString().Equals(pFiltro)).Descripcion;
                         }
                         break;
-
                     case "gnoss:userstatus":
                         if (pFiltro.Equals("1"))
                         {
@@ -6023,8 +5683,6 @@ namespace ServicioCargaFacetas
                     case "rdf:type"://tipo
                         nombreReal = ObtenerNombreTipoElemento(pFiltro);
                         break;
-
-
                     case "gnoss:hasnumeroVotos":
                     case "gnoss:hasnumeroComentarios":
                     case "gnoss:hasnumeroVisitas":
@@ -6086,6 +5744,7 @@ namespace ServicioCargaFacetas
 
             return nombreReal;
         }
+
         [NonAction]
         private string ObtenerDecadaDelSiglo(string pFecha)
         {
@@ -6099,18 +5758,19 @@ namespace ServicioCargaFacetas
                 decadaInferiorAnio = anioInicio * 10;
                 decadaSuperiorAnio = (anioInicio * 10) - 9;
 
-                decada = -decadaSuperiorAnio + "-" + -decadaInferiorAnio + " a.C.";
+                decada = $"{-decadaSuperiorAnio}-{-decadaInferiorAnio} a.C.";
             }
             else
             {
                 decadaInferiorAnio = (anioInicio - 1) * 10;
                 decadaSuperiorAnio = ((anioInicio - 1) * 10) + 9;
 
-                decada = decadaInferiorAnio + "-" + decadaSuperiorAnio;
+                decada = $"{decadaInferiorAnio}-{decadaSuperiorAnio}";
             }
 
             return decada;
         }
+
         [NonAction]
         private string ObtenerNombreRealFiltroSiglo(string pFiltro, List<string> pFiltrosFacetas)
         {
@@ -6126,7 +5786,7 @@ namespace ServicioCargaFacetas
                 //Siglo negativo, Antes de Cristo
                 foreach (string cachofecha in cachosFecha)
                 {
-                    cachoFechaTemporal.Add("-" + cachofecha);
+                    cachoFechaTemporal.Add($"-{cachofecha}");
                 }
 
                 cachosFecha = cachoFechaTemporal.ToArray();
@@ -6137,7 +5797,6 @@ namespace ServicioCargaFacetas
                 if ((pFiltrosFacetas.Count > 0 && pFiltrosFacetas[0] == pFiltro) || pFiltrosFacetas.Count == 0)
                 {
                     // Siglo
-
                     siglo1 = cachosFecha[0];
                     int numero = 0;
                     if (siglo1.Length == 8)
@@ -6180,6 +5839,7 @@ namespace ServicioCargaFacetas
 
             return nombreReal;
         }
+
         [NonAction]
         private string ObtenerSigloNumeroRomano(int pNumero)
         {
@@ -6197,6 +5857,7 @@ namespace ServicioCargaFacetas
 
             return numeroRomano;
         }
+
         [NonAction]
         private void CargarDicNumerosRomanos()
         {
@@ -6262,6 +5923,7 @@ namespace ServicioCargaFacetas
             mDicNumerosRomanos.Add(29, "XXIX");
             mDicNumerosRomanos.Add(30, "XXX");
         }
+
         [NonAction]
         private int ObtenerAnioFechaSinUltimaCifra(string pFecha)
         {
@@ -6307,6 +5969,7 @@ namespace ServicioCargaFacetas
 
             return anioInicio;
         }
+
         [NonAction]
         public string ObtenerAnioFecha(string pFecha)
         {
@@ -6330,7 +5993,7 @@ namespace ServicioCargaFacetas
                         break;
                 }
 
-                anioString = anio.ToString() + " a.C.";
+                anioString = $"{anio.ToString()} a.C.";
             }
             else
             {
@@ -6594,11 +6257,7 @@ namespace ServicioCargaFacetas
         [NonAction]
         public string ObtenerNombreFaceta(string pNombres)
         {
-            string nombreFaceta = "";
-
-            nombreFaceta = UtilCadenas.ObtenerTextoDeIdioma(pNombres, mLanguageCode, ParametrosGenerales.IdiomaDefecto);
-
-            return nombreFaceta;
+            return UtilCadenas.ObtenerTextoDeIdioma(pNombres, mLanguageCode, ParametrosGenerales.IdiomaDefecto);
         }
 
 
@@ -6716,8 +6375,7 @@ namespace ServicioCargaFacetas
             pFecha = pFecha.Substring(0, pFecha.LastIndexOf("/"));
             nfecha += pFecha.Substring(pFecha.LastIndexOf("/") + 1);
 
-            return nfecha + "000000";
-
+            return $"{nfecha}000000";
         }
 
         #endregion
@@ -6833,7 +6491,6 @@ namespace ServicioCargaFacetas
             else if (pFaceta.AlgoritmoTransformacion.Equals(TiposAlgoritmoTransformacion.Fechas))
             {
                 //TODO ALVARO
-                //return CargarFacetaRangosFechaDinamica(pLimite, pFaceta);
                 facetaModel = CargarFacetaFechaDinamica(pLimite, pFaceta);
             }
             else if (pFaceta.AlgoritmoTransformacion.Equals(TiposAlgoritmoTransformacion.FechaMinMax))
@@ -6884,7 +6541,6 @@ namespace ServicioCargaFacetas
                 {
                     mostrarfaceta = false;
                 }
-                //int numContactos = 0;
 
                 string consultaReciproca, claveFaceta = string.Empty;
                 mFacetadoCL.FacetadoCN.FacetadoAD.ObtenerDatosFiltroReciproco(out consultaReciproca, pFaceta.ClaveFaceta, out claveFaceta);
@@ -6894,14 +6550,12 @@ namespace ServicioCargaFacetas
                     if (!myrow.IsNull(0) && !elementos.ContainsKey((string)myrow[0]))
                     {
                         string nombre = (string)myrow[0];
-                        if (String.IsNullOrEmpty(nombre))
+                        if (string.IsNullOrEmpty(nombre))
                         {
                             nombre = TextoSinEspecificar;
                         }
                         int cantidad = 0;
                         int.TryParse((string)myrow[1], out cantidad);
-
-
                         elementos.Add(nombre, cantidad);
                     }
                 }
@@ -7146,16 +6800,14 @@ namespace ServicioCargaFacetas
             DataWrapperProyecto proyectosIdentidadDW = new DataWrapperProyecto();
             List<string> listaValores = new List<string>();
 
-
             foreach (DataRow fila in mFacetadoDS.Tables[pFaceta.ClaveFaceta].Rows)
             {
                 string idProyectoCompleto = (string)fila[0];
                 string idProyecto = idProyectoCompleto.Substring("http://gnoss/".Length);
                 listaValores.Add((string)fila[1]);
-                idProyecto = "'" + idProyecto;
+                idProyecto = $"'{idProyecto}";
                 idProyecto += "',";
                 listaProyectos += idProyecto;
-
             }
 
             listaProyectos = listaProyectos.Substring(0, listaProyectos.Length - 1);
@@ -7168,7 +6820,6 @@ namespace ServicioCargaFacetas
 
             Dictionary<string, int> elementos = new Dictionary<string, int>();
             Dictionary<string, string> parametrosElementos = new Dictionary<string, string>();
-
 
             string nombre = "";
             string parametro;
@@ -7192,11 +6843,10 @@ namespace ServicioCargaFacetas
                     }
                     elementos.Add(nombre, int.Parse((dr[0][1]).ToString()));
                 }
-                parametro = "gnoss:" + proyectoID.ToString().ToUpper();
+                parametro = $"gnoss:{proyectoID.ToString().ToUpper()}";
                 parametrosElementos.Add(nombre, parametro);
 
             }
-
 
             return AgregarFaceta("sioc:has_space", GetText("COMMON", "COMUNIDADES"), elementos, parametrosElementos, pLimite, pLimiteOriginal, pFaceta);
         }
@@ -7228,8 +6878,6 @@ namespace ServicioCargaFacetas
                         parametrosElementos.Add(tipo, (string)myrow[0]);
                     }
 
-
-
                     if (tipo.Contains("Personas") || tipo.Contains("Organizaciones"))
                     {
                         numContactos += int.Parse((string)myrow[1]);
@@ -7249,8 +6897,6 @@ namespace ServicioCargaFacetas
                     {
                         esGrupo = true;
                     }
-
-
                 }
                 if (esPersona && esOrg && esGrupo)
                 {
@@ -7258,8 +6904,8 @@ namespace ServicioCargaFacetas
                 }
                 return AgregarFaceta("rdf:type", ObtenerNombreFaceta(pFaceta.Nombre), elementos, parametrosElementos, pLimite, pFaceta);
             }
-            return null;
 
+            return null;
         }
 
         /// <summary>
@@ -7270,7 +6916,6 @@ namespace ServicioCargaFacetas
         {
             Dictionary<string, int> elementos = new Dictionary<string, int>();
             Dictionary<string, string> parametrosElementos = new Dictionary<string, string>();
-
 
             foreach (DataRow myrow in mFacetadoDS.Tables["gnoss:hasEstadoCorreccion"].Rows)
             {
@@ -7310,7 +6955,6 @@ namespace ServicioCargaFacetas
             Dictionary<string, int> elementos = new Dictionary<string, int>();
             Dictionary<string, string> parametrosElementos = new Dictionary<string, string>();
 
-
             foreach (DataRow myrow in mFacetadoDS.Tables["gnoss:hasnivelcertification"].Rows)
             {
                 if (!elementos.ContainsKey("gnoss:hasnivelcertification"))
@@ -7341,7 +6985,6 @@ namespace ServicioCargaFacetas
             }
 
             return AgregarFaceta("gnoss:hasnivelcertification", ObtenerNombreFaceta(pNombreFaceta), elementos, parametrosElementos, pLimite, pFaceta);
-            //GetText("COMBUSQUEDAAVANZADA", "NIVELCERTIFI")
         }
 
         private FacetModel CargarFacetaEstadoUsuario(int pLimite, string pNombreFaceta, Faceta pFaceta)
@@ -7473,6 +7116,7 @@ namespace ServicioCargaFacetas
             //    }
             //}
         }
+
         [NonAction]
         public FacetModel AgregarFacetaCatArbol(string pClaveFaceta, string pTitulo, List<Guid> pListaCategorias, Dictionary<string, int> pElementosFaceta, Dictionary<string, string> pParametrosElementos, int pLimite, Faceta pFaceta)
         {
@@ -7551,7 +7195,7 @@ namespace ServicioCargaFacetas
             List<string> filtrosFacetas = null;
             List<string> listaCategoriasExpandidas = new List<string>();
 
-            if (this.mListaFiltros.ContainsKey(pClaveFaceta))
+            if (mListaFiltros.ContainsKey(pClaveFaceta))
             {
                 filtrosFacetas = mListaFiltros[pClaveFaceta];
                 List<string> filtrosFacetasNombreReal = null;
@@ -7621,11 +7265,11 @@ namespace ServicioCargaFacetas
             {
                 if (mFaceta != null && mFaceta.Equals(pClaveFaceta) && mListaFiltrosConGrupos.ContainsKey("default;rdf:type") && mListaFiltrosConGrupos["default;rdf:type"].Count == 1)
                 {
-                    faceta.FacetKey = mListaFiltrosConGrupos["default;rdf:type"][0] + ";" + pClaveFaceta;
+                    faceta.FacetKey = $"{mListaFiltrosConGrupos["default;rdf:type"][0]};{pClaveFaceta}";
                 }
                 else
                 {
-                    faceta.FacetKey = pFaceta.ObjetoConocimiento + ";" + pClaveFaceta;
+                    faceta.FacetKey = $"{pFaceta.ObjetoConocimiento};{pClaveFaceta}";
                 }
             }
 
@@ -7638,6 +7282,7 @@ namespace ServicioCargaFacetas
 
             return faceta;
         }
+
         [NonAction]
         private List<FacetItemModel> CargarElementosHijosFaceta(List<CategoriaTesauro> pListaCategorias, List<Guid> pListaCategoriasID, List<Guid> pListaCategoriasIDQuitar, Dictionary<string, string> pParametrosElementos, List<string> pFiltrosFacetas, string pClaveFaceta, List<string> pListaCategoriasExpandidas, Dictionary<string, int> pElementosFaceta, TipoPropiedadFaceta pTipoPropiedad)
         {
@@ -7650,13 +7295,13 @@ namespace ServicioCargaFacetas
                     string elemento = catTes.Nombre[UtilIdiomas.LanguageCode];
                     string parametro = elemento.Replace("'", "\'");
 
-                    if ((pParametrosElementos != null) && pParametrosElementos["gnoss:" + catTes.Clave.ToString().ToUpper()].Equals(elemento))
+                    if ((pParametrosElementos != null) && pParametrosElementos[$"gnoss:{catTes.Clave.ToString().ToUpper()}"].Equals(elemento))
                     {
-                        parametro = "gnoss:" + catTes.Clave.ToString().ToUpper();
+                        parametro = $"gnoss:{catTes.Clave.ToString().ToUpper()}";
                     }
 
                     bool pintarX = !((pFiltrosFacetas == null) || ((!pFiltrosFacetas.Contains(parametro)) && !pFiltrosFacetas.Contains(parametro)));
-                    FacetItemModel facItemModel = AgregarElementoAFaceta(pClaveFaceta, elemento, parametro, pElementosFaceta["gnoss:" + catTes.Clave.ToString().ToUpper()], pintarX, 0, true, 0, pListaCategoriasExpandidas, false, pParametrosElementos, TiposAlgoritmoTransformacion.Ninguno, pTipoPropiedad);
+                    FacetItemModel facItemModel = AgregarElementoAFaceta(pClaveFaceta, elemento, parametro, pElementosFaceta[$"gnoss:{catTes.Clave.ToString().ToUpper()}"], pintarX, 0, true, 0, pListaCategoriasExpandidas, false, pParametrosElementos, TiposAlgoritmoTransformacion.Ninguno, pTipoPropiedad);
 
                     if (catTes.Hijos != null && catTes.Hijos.Count > 0)
                     {
@@ -7730,7 +7375,6 @@ namespace ServicioCargaFacetas
                     }
 
                     string filtro = "";
-
                     if (!esRangoAnteriorA)
                     {
                         filtro = fechaString + suplementoCeros;
@@ -7761,28 +7405,27 @@ namespace ServicioCargaFacetas
                         {
                             if (filtroMay == filtroMenor)
                             {
-                                filtro = (fecha + suma - 1).ToString() + suplementoCeros + "-" + filtroMay;
+                                filtro = $"{(fecha + suma - 1).ToString()}{suplementoCeros}-{filtroMay}";
                             }
                             else if (filtroMay > filtroMenor)
                             {
                                 //Los filtros tienen que ir de menor a mayor
-                                filtro = filtroMenor + "-" + filtroMay;
+                                filtro = $"{filtroMenor}-{filtroMay}";
                             }
                             else
                             {
-                                filtro = filtroMay + "-" + filtroMenor;
+                                filtro = $"{filtroMay}-{filtroMenor}";
                             }
                         }
                         else if (string.IsNullOrEmpty(filtro))
                         {
                             //Los años vienen con el filtro null para el primer elemento de la carga.
-                            filtro = "-" + (fecha + suma) + suplementoCeros;
+                            filtro = $"-{(fecha + suma)}{suplementoCeros}";
                         }
                     }
                     else
                     {
                         filtro += "-";
-                        //filtro = "-" + (fecha + suma) + suplementoCeros;
                     }
 
                     List<string> listaFiltros = new List<string>();
@@ -7828,7 +7471,6 @@ namespace ServicioCargaFacetas
             int count = 0;
             foreach (DataRow myrow3 in mFacetadoDS.Tables[pFaceta.ClaveFaceta].Rows)
             {
-                //bool esRangoAnteriorA = false;
                 int cantidad = int.Parse(myrow3[1].ToString());
                 if (cantidad > 0)
                 {
@@ -7842,50 +7484,46 @@ namespace ServicioCargaFacetas
 
                     string suplementoCeros = "";
                     int sumaFiltroMayor = 1;
-
-                    //if (!sigloString.Equals("0"))
+                    //8 ceros corresponde a un milenio, ejemplo: 1900, 1800...
+                    int numCerosBucle = 8;
+                    if (sigloString.Length == 1)
                     {
-                        //8 ceros corresponde a un milenio, ejemplo: 1900, 1800...
-                        int numCerosBucle = 8;
-                        if (sigloString.Length == 1)
-                        {
-                            //7 ceros corresponde a una centura, ejemplo: 900, 700...
-                            numCerosBucle = 7;
-                        }
+                        //7 ceros corresponde a una centura, ejemplo: 900, 700...
+                        numCerosBucle = 7;
+                    }
 
-                        //Cuando hay un filtro se están trayendo decenios
-                        if (sigloString.Length == 4 && mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
-                        {
-                            sumaFiltroMayor = 10;
-                        }
-                        else if (sigloString.Length == 3 && mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
-                        {
-                            //Si hay un filtro aplicado y la longitud es de 2, se ponen 6 ceros porque corresponde a un centura, ejemplo: 100, 200, 300...
-                            numCerosBucle = 7;
-                            sumaFiltroMayor = 10;
-                        }
-                        else if (sigloString.Length == 1 && sigloString.Equals("0") && mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
-                        {
-                            //Si hay un filtro aplicado y la longitud es de 1, se ponen 6 ceros porque corresponde a un año, ejemplo: 1, 2, 3...
-                            numCerosBucle = 5;
-                            sumaFiltroMayor = 10;
-                        }
-                        else if (sigloString.Length == 2 && mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
-                        {
-                            //Si hay un filtro aplicado y la longitud es de 1, se ponen 6 ceros porque corresponde a un año, ejemplo: 1, 2, 3...
-                            numCerosBucle = 6;
-                            sumaFiltroMayor = 10;
-                        }
+                    //Cuando hay un filtro se están trayendo decenios
+                    if (sigloString.Length == 4 && mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
+                    {
+                        sumaFiltroMayor = 10;
+                    }
+                    else if (sigloString.Length == 3 && mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
+                    {
+                        //Si hay un filtro aplicado y la longitud es de 2, se ponen 6 ceros porque corresponde a un centura, ejemplo: 100, 200, 300...
+                        numCerosBucle = 7;
+                        sumaFiltroMayor = 10;
+                    }
+                    else if (sigloString.Length == 1 && sigloString.Equals("0") && mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
+                    {
+                        //Si hay un filtro aplicado y la longitud es de 1, se ponen 6 ceros porque corresponde a un año, ejemplo: 1, 2, 3...
+                        numCerosBucle = 5;
+                        sumaFiltroMayor = 10;
+                    }
+                    else if (sigloString.Length == 2 && mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
+                    {
+                        //Si hay un filtro aplicado y la longitud es de 1, se ponen 6 ceros porque corresponde a un año, ejemplo: 1, 2, 3...
+                        numCerosBucle = 6;
+                        sumaFiltroMayor = 10;
+                    }
 
-                        while (sigloString.Length + suplementoCeros.Length < numCerosBucle)
-                        {
-                            //hasta que los rangos no tengan 8 caracteres tengo que ponerle ceros 
-                            suplementoCeros += "0";
-                        }
+                    while (sigloString.Length + suplementoCeros.Length < numCerosBucle)
+                    {
+                        //hasta que los rangos no tengan 8 caracteres tengo que ponerle ceros 
+                        suplementoCeros += "0";
                     }
 
                     string filtro = "";
-                    filtro = filtroMayor + suplementoCeros + "-" + (filtroMayor + sumaFiltroMayor) + suplementoCeros;
+                    filtro = $"{filtroMayor}{suplementoCeros}-{(filtroMayor + sumaFiltroMayor)}{suplementoCeros}";
 
                     List<string> listaFiltros = new List<string>();
                     if (mListaFiltros.ContainsKey(pFaceta.ClaveFaceta))
@@ -7967,17 +7605,6 @@ namespace ServicioCargaFacetas
                     }
                     else
                     {
-
-                        //if (mTConfiguracionOntologia != null && mTConfiguracionOntologia.Tables.Contains("Ontologias"))
-                        //{
-
-                        //    DataRow[] filasOntologia = mTConfiguracionOntologia.Tables["Ontologias"].Select("Ontologia = '" + ObtenerNombreFaceta(s) + "'");
-                        //    if (filasOntologia.Length > 0)
-                        //    {
-                        //        tipo = (string)filasOntologia[0]["Nombre"];
-                        //    }
-                        //}
-
                         if (s.Contains("@"))
                         {
                             tipo = ObtenerNombreFaceta(s);
@@ -7992,9 +7619,10 @@ namespace ServicioCargaFacetas
                     elementos.Add(tipo, int.Parse((string)myrow[1]));
                     parametrosElementos.Add(tipo, s);
                 }
-            }//GetText("COMBUSQUEDAAVANZADA", "TIPODOCUMENTO")
+            }
             return AgregarFaceta("gnoss:hastipodocExt", ObtenerNombreFaceta(pFaceta.Nombre), elementos, parametrosElementos, limite, pFaceta);
         }
+
         [NonAction]
         private FacetModel CargarFacetaTipoDoc(int pLimite, Faceta pFaceta)
         {
@@ -8045,9 +7673,6 @@ namespace ServicioCargaFacetas
                             {
                                 int cantidad = 0;
                                 int.TryParse((string)myrow[1], out cantidad);
-                                //int numero = (int)myrow[1];
-                                //cantidad = numero;
-                                // int.TryParse(myrow[1], out cantidad);
                                 elementos.Add(tipo, cantidad);
                                 parametrosElementos.Add(tipo, (string)myrow[0]);
                             }
@@ -8137,7 +7762,7 @@ namespace ServicioCargaFacetas
                         string[] valores = valor.Split(delimiter, StringSplitOptions.RemoveEmptyEntries);
                         if (valores.Length > 1)
                         {
-                            texto = GetText("COMBUSQUEDAAVANZADA", "DE") + " " + valores[0] + " " + GetText("COMBUSQUEDAAVANZADA", "A") + " " + valores[1];
+                            texto = $"{GetText("COMBUSQUEDAAVANZADA", "DE")} {valores[0]} {GetText("COMBUSQUEDAAVANZADA", "A")} {valores[1]}";
                         }
                         else
                         {
@@ -8180,7 +7805,7 @@ namespace ServicioCargaFacetas
                 }
                 else { cp = "00"; }
 
-                cp = cp + "###";
+                cp = $"{cp}###";
 
                 if (elementos.ContainsKey(cp))
                 {
@@ -8233,16 +7858,7 @@ namespace ServicioCargaFacetas
                             suplementoCeros += "0";
                         }
 
-                        fechaString = (fecha).ToString();
-                        if (fechaString.Length == 6)
-                        {
-                            // estamos haciendo rangos por meses
-
-                        }
-                        else if (fechaString.Length == 4)
-                        {
-
-                        }
+                        fechaString = fecha.ToString();
 
                         string filtro = fechaString + suplementoCeros;
 
@@ -8267,21 +7883,21 @@ namespace ServicioCargaFacetas
 
                             if (filtroMay == filtroMenor)
                             {
-                                filtro = (fecha).ToString() + suplementoCeros + "-" + filtroMay;
+                                filtro = $"{fecha.ToString()}{suplementoCeros}-{filtroMay}";
                             }
                             else if (filtroMay > filtroMenor)
                             {
-                                filtro = filtroMenor + "-" + filtroMay;
+                                filtro = $"{filtroMenor}-{filtroMay}";
                             }
                             else
                             {
-                                filtro = filtroMay + "-" + filtroMenor;
+                                filtro = $"{filtroMay}-{filtroMenor}";
                             }
                         }
                         else if (string.IsNullOrEmpty(filtro))
                         {
                             //Los años vienen con el filtro null para el primer elemento de la carga.
-                            filtro = "-" + (fecha) + suplementoCeros;
+                            filtro = $"-{fecha}{suplementoCeros}";
                         }
 
                         List<string> listaFiltros = new List<string>();
@@ -8318,7 +7934,6 @@ namespace ServicioCargaFacetas
             Dictionary<string, string> parametrosElementos = new Dictionary<string, string>();
 
             List<Guid> categoriasFiltroQuitar = new List<Guid>();
-            //if (pFilaConfiguracion.Table.Columns.Contains("Filtro") && !pFilaConfiguracion.IsNull("Filtro"))
             if (pFaceta.FilaElementoEntity is FacetaFiltroProyecto || pFaceta.FilaElementoEntity is FacetaFiltroHome)
             {
                 //Esta faceta es para que se muestre sólo una categoría del tesauro. 
@@ -8371,7 +7986,7 @@ namespace ServicioCargaFacetas
                     if (!elementos.ContainsKey(nombre))
                     {
                         elementos.Add(nombre, PasarAEntero((string)fila[1]));
-                        parametrosElementos.Add(nombre, "gnoss:" + id.ToString().ToUpper());
+                        parametrosElementos.Add(nombre, $"gnoss:{id.ToString().ToUpper()}");
                     }
                 }
             }
@@ -8385,11 +8000,8 @@ namespace ServicioCargaFacetas
         [NonAction]
         private FacetModel CargarFacetaCategoriaHomeCatalogo(int pLimite, bool pModoArbol, Faceta pFaceta)
         {
-            string idPanel = "skos_ConceptID";
-
             string urllinkCategoria = mControladorBase.UrlsSemanticas.GetURLBaseRecursos(mUtilServicios.UrlIntragnoss, UtilIdiomas, FilaProyecto.NombreCorto, "/", false);
 
-            //DataRow[] filasConfig = mConfiguracionDS.Tables["TablaConfiguracion"].Select("faceta='" + pClaveFaceta + "'");
             Dictionary<string, int> elementos = new Dictionary<string, int>();
             Dictionary<string, string> parametrosElementos = new Dictionary<string, string>();
 
@@ -8430,12 +8042,12 @@ namespace ServicioCargaFacetas
                         pagina = GetText("URLSEM", "PERSONASYORGANIZACIONES");
                     }
 
-                    urllinkCategoria += "/" + pagina;
-                    urlFinal = urllinkCategoria + "#skos:ConceptID=gnoss:" + catTesauro.Clave.ToString().ToUpper();
+                    urllinkCategoria += $"/{pagina}";
+                    urlFinal = $"{urllinkCategoria}#skos:ConceptID=gnoss:{catTesauro.Clave.ToString().ToUpper()}";
                 }
                 else
                 {
-                    urlFinal = urllinkCategoria + "#skos:ConceptID=gnoss:" + catTesauro.Clave.ToString().ToUpper();
+                    urlFinal = $"{urllinkCategoria}#skos:ConceptID=gnoss:{catTesauro.Clave.ToString().ToUpper()}";
                 }
 
                 nombre = catTesauro.Nombre[UtilIdiomas.LanguageCode];
@@ -8474,7 +8086,6 @@ namespace ServicioCargaFacetas
                 mFacetadoDSAuxPorFaceta[pFaceta.ClaveFaceta].Add(new KeyValuePair<string, FacetadoDS>(pFaceta.FiltroProyectoID, mFacetadoDS));
             }
 
-
             if (mFacetadoDSAuxPorFaceta.ContainsKey(pFaceta.ClaveFaceta))
             {
                 foreach (KeyValuePair<string, FacetadoDS> pair in mFacetadoDSAuxPorFaceta[pFaceta.ClaveFaceta])
@@ -8485,7 +8096,6 @@ namespace ServicioCargaFacetas
                         break;
                     }
                 }
-
                 nivelSemantico = pFaceta.FiltroProyectoID.Split(';')[0];
             }
             else
@@ -8511,6 +8121,7 @@ namespace ServicioCargaFacetas
                 return CargarFacetaTesauroSemanticoNormal(pLimite, pFaceta, facetadoDatos, pOrdenarPorNumero);
             }
         }
+
         [NonAction]
         private FacetModel CargarFacetaTesauroSemanticoNormal(int pLimite, Faceta pFaceta, FacetadoDS pFacetaDatos, bool pOrdenarPorNumero)
         {
@@ -8586,7 +8197,7 @@ namespace ServicioCargaFacetas
             if (mFacetasHomeCatalogo)
             {
                 url = ObtenerUrlPaginaActual(pFaceta);
-                accion = "document.location = '" + url + "?";
+                accion = $"document.location = '{url}?";
             }
 
             int limite = pLimite;
@@ -8609,11 +8220,11 @@ namespace ServicioCargaFacetas
             {
                 if (mFaceta != null && mFaceta.Equals(pFaceta.ClaveFaceta) && mListaFiltrosConGrupos.ContainsKey("default;rdf:type") && mListaFiltrosConGrupos["default;rdf:type"].Count == 1)
                 {
-                    facetaModel.FacetKey = mListaFiltrosConGrupos["default;rdf:type"][0] + ";" + pFaceta.ClaveFaceta;
+                    facetaModel.FacetKey = $"{mListaFiltrosConGrupos["default;rdf:type"][0]};{pFaceta.ClaveFaceta}";
                 }
                 else
                 {
-                    facetaModel.FacetKey = pFaceta.ObjetoConocimiento + ";" + pFaceta.ClaveFaceta;
+                    facetaModel.FacetKey = $"{pFaceta.ObjetoConocimiento};{pFaceta.ClaveFaceta}";
                 }
             }
 
@@ -8633,13 +8244,13 @@ namespace ServicioCargaFacetas
                 {
                     filtrosUsuarios = this.mListaFiltrosFacetasUsuario[pFaceta.ClaveFaceta];
                 }
+
                 //Se muestran primero los filtros seleccionados por el usuario con una X
                 foreach (string filtro in filtrosFacetas.ToArray())
                 {
-                    //string nombreReal = ObtenerNombreRealFiltro(filtrosFacetas, pFaceta.ClaveFaceta, filtro, TipoPropiedadFaceta.NULL);
                     string nombreReal = ObtenerPropTesSem(facetadoTesSemDS, arrayTesSem[3], filtro);
 
-                    if ((mListaFiltrosFacetasUsuario.ContainsKey(pFaceta.ClaveFaceta)) && (mListaFiltrosFacetasUsuario[pFaceta.ClaveFaceta].Contains(filtro)))
+                    if (mListaFiltrosFacetasUsuario.ContainsKey(pFaceta.ClaveFaceta) && mListaFiltrosFacetasUsuario[pFaceta.ClaveFaceta].Contains(filtro))
                     {
                         int numElementos = -1;
 
@@ -8666,9 +8277,7 @@ namespace ServicioCargaFacetas
 
                         //Pinta también los hijos
                         string parametro = elemento.Replace("'", "\'");
-
                         string nombreReal = ObtenerPropTesSem(facetadoTesSemDS, arrayTesSem[3], elemento);
-
                         bool pintarX = mListaFiltros.ContainsKey(pFaceta.ClaveFaceta) && mListaFiltros[pFaceta.ClaveFaceta].Contains(elemento);
 
                         FacetItemModel facetaItemModel = AgregarElementoAFaceta(pFaceta.ClaveFaceta, nombreReal, parametro, elementos[elemento], pintarX, false, pFaceta.AlgoritmoTransformacion);
@@ -8693,11 +8302,19 @@ namespace ServicioCargaFacetas
 
             return facetaModel;
         }
+
+        /// <summary>
+        /// Se obtienen los tesauros solicitados. Se guardan en cache local
+        /// </summary>
+        /// <param name="pLimite"></param>
+        /// <param name="pFaceta"></param>
+        /// <param name="pFacetaDatos"></param>
+        /// <param name="pOrdenarPorNumero"></param>
+        /// <returns></returns>
         [NonAction]
         private FacetModel CargarFacetaTesauroSemanticoArbol(int pLimite, Faceta pFaceta, FacetadoDS pFacetaDatos, bool pOrdenarPorNumero)
         {
             string[] arrayTesSem = ObtenerDatosFacetaTesSem(pFaceta.ClaveFaceta);
-
             string tituloFac = ObtenerNombreFaceta(pFaceta.Nombre);
 
             if (mFacetadoDSAuxPorFaceta.ContainsKey(pFaceta.ClaveFaceta))
@@ -8717,7 +8334,6 @@ namespace ServicioCargaFacetas
                     }
                     int cantidad = 0;
                     int.TryParse((string)myrow[1], out cantidad);
-
 
                     elementos.Add(nombre, cantidad);
                 }
@@ -8748,9 +8364,8 @@ namespace ServicioCargaFacetas
 
                     if (facetadoTesSemDS == null)
                     {
-                        FacetadoCN facCN = new FacetadoCN(mUtilServicios.UrlIntragnoss, mGrafoID, mEntityContext, mLoggingService, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);                        
-                        facetadoTesSemDS = facCN.ObtenerValoresPropiedadesEntidadesTodas(mGrafoID, listaPropsTesSem, true);
-
+                        FacetadoCN facCN = new FacetadoCN(mUtilServicios.UrlIntragnoss, mGrafoID, mEntityContext, mLoggingService, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
+                        facetadoTesSemDS = facCN.ObtenerValoresPropiedadesEntidades(mGrafoID, listaEntidadesBusqueda, listaPropsTesSem, true);
                         facCN.Dispose();
 
                         if (!TesauroSemDSFaceta.ContainsKey(pFaceta.ClaveFaceta))
@@ -8791,7 +8406,7 @@ namespace ServicioCargaFacetas
             FacetModel facetaModel = new FacetModel();
             facetaModel.FacetItemList = new List<FacetItemModel>();
             //Se le da este guid para que la vista reconozca a través de el que es una faceta de tipo tesauro semántico.
-            facetaModel.ThesaurusID = new Guid("11111111-1111-1111-1111-111111111111"); 
+            facetaModel.ThesaurusID = new Guid("11111111-1111-1111-1111-111111111111");
             facetaModel.Key = idPanel;
             facetaModel.Name = Titulo;
             facetaModel.OneFacetRequest = !string.IsNullOrEmpty(mFaceta);
@@ -8814,7 +8429,7 @@ namespace ServicioCargaFacetas
             facetaModel.Multilanguage = pFaceta.MultiIdioma.ToString().ToLower();
             facetaModel.AutocompleteBehaviour = ObtenerBehaviourDeComportamiento(pFaceta.Comportamiento);
 
-            if(mParametroProyecto.ContainsKey(ParametroAD.VerMasFacetaTesauroSemantico) && mParametroProyecto[ParametroAD.VerMasFacetaTesauroSemantico].Equals("1"))
+            if (mParametroProyecto.ContainsKey(ParametroAD.VerMasFacetaTesauroSemantico) && mParametroProyecto[ParametroAD.VerMasFacetaTesauroSemantico].Equals("1"))
             {
                 facetaModel.SeeMore = true;
             }
@@ -8853,7 +8468,6 @@ namespace ServicioCargaFacetas
             if (elementos.Count != 1 || !elementos.ContainsKey("null"))
             {
                 //Ahora se pintan el resto de elementos que el usuario no ha pinchado todavía
-                //List<string> elementosPintados = new List<string>();
                 List<string> listaElementosOrdenados = OrdenarElementosOrdenadosTesSem(elementos, facetadoTesSemDS, arrayTesSem[2], pFaceta.TipoDisenio == TipoDisenio.ListaOrdCantidadTesauro);
                 List<string> listaElementosPadre = new List<string>(listaElementosOrdenados);
 
@@ -8862,8 +8476,8 @@ namespace ServicioCargaFacetas
                 foreach (string elemento in listaElementosOrdenados)
                 {
                     List<string> hijos = ObtenerPropTesSemList(facetadoTesSemDS, arrayTesSem[4], elemento);
-                    //Por cada hijo se elimina de listaElementosPadre
 
+                    //Por cada hijo se elimina de listaElementosPadre
                     if (hijos != null)
                     {
                         foreach (string hijo in hijos)
@@ -8897,7 +8511,6 @@ namespace ServicioCargaFacetas
                     estaFacetado = true;
                     // El tesauro está facetado
                     string categoriaFacetada = filtroProyectoID[3];
-                    // compruebo si existe el ID de la categoría
                     if (padreHijos.ContainsKey(categoriaFacetada))
                     {
                         facetaModel.Name = padreHijos[categoriaFacetada].Key;
@@ -8962,6 +8575,7 @@ namespace ServicioCargaFacetas
 
             return facetaModel;
         }
+
         [NonAction]
         private string TransformarTextoSegunMayusculas(string pNombre, FacetaMayuscula pMayusculas)
         {
@@ -9002,7 +8616,7 @@ namespace ServicioCargaFacetas
                     {
                         if (pListaElementosOrdenados.Contains(a))
                         {
-                            idHijo = "hijo_" + Guid.NewGuid().ToString();
+                            idHijo = $"hijo_{Guid.NewGuid().ToString()}";
                             break;
                         }
                     }
@@ -9015,21 +8629,19 @@ namespace ServicioCargaFacetas
                 string urlFiltro = "";
                 if (!string.IsNullOrEmpty(pFiltroPadres))
                 {
-                    urlFiltro = ObtenerUrlFiltro(pFiltroPadres + "&" + pClaveFaceta + "=" + elementoFiltroURL, pFaceta, null);
+                    urlFiltro = ObtenerUrlFiltro($"{pFiltroPadres}&{pClaveFaceta}={elementoFiltroURL}", pFaceta, null);
                 }
                 else
                 {
-                    urlFiltro = ObtenerUrlFiltro(pClaveFaceta + "=" + elementoFiltroURL, pFaceta, null);
+                    urlFiltro = ObtenerUrlFiltro($"{pClaveFaceta}={elementoFiltroURL}", pFaceta, null);
                 }
 
                 string nombreReal = pElementos[pElementoHijo].Key;
-
                 nombreReal = TransformarTextoSegunMayusculas(nombreReal, pFaceta.Mayusculas);
 
                 if (!string.IsNullOrEmpty(nombreReal))
                 {
                     FacetaMayuscula mayusculas = FacetaMayuscula.Nada;
-
                     mayusculas = pFaceta.Mayusculas;
 
                     //Compruebo como se debe pintar el elemento
@@ -9050,15 +8662,13 @@ namespace ServicioCargaFacetas
                     }
                 }
 
-
                 FacetItemModel facetaItem = new FacetItemModel();
                 facetaItem.Filter = urlFiltro;
                 facetaItem.Number = pElementosContadores[pElementoHijo];
                 facetaItem.Tittle = nombreReal;
-                facetaItem.Name = pClaveFaceta + "=" + elementoFiltro;
-                //facetaItem.NivelFacetaItem = true;
-                facetaItem.FacetItemlist = new List<FacetItemModel>();
+                facetaItem.Name = $"{pClaveFaceta}={elementoFiltro}";
 
+                facetaItem.FacetItemlist = new List<FacetItemModel>();
                 if (mListaFiltros.ContainsKey(pFaceta.ClaveFaceta) && mListaFiltros[pFaceta.ClaveFaceta].Contains(pElementoHijo))
                 {
                     facetaItem.Selected = true;
@@ -9069,11 +8679,11 @@ namespace ServicioCargaFacetas
                     string filtrosPadresURL = "";
                     if (!string.IsNullOrEmpty(pFiltroPadres))
                     {
-                        filtrosPadresURL = pFiltroPadres + "&" + pClaveFaceta + "=" + pElementoHijo;
+                        filtrosPadresURL = $"{pFiltroPadres}&{pClaveFaceta}={pElementoHijo}";
                     }
                     else
                     {
-                        filtrosPadresURL = pClaveFaceta + "=" + pElementoHijo;
+                        filtrosPadresURL = $"{pClaveFaceta}={pElementoHijo}";
                     }
 
                     foreach (string hijo in pElementos[pElementoHijo].Value)
@@ -9106,22 +8716,12 @@ namespace ServicioCargaFacetas
         {
             return AgregarFaceta(pClaveFaceta, pTitulo, pElementosFaceta, pParametrosElementos, pLimite, pLimite, pFaceta);
         }
+
         [NonAction]
         public FacetModel AgregarFaceta(string pClaveFaceta, string pTitulo, Dictionary<string, int> pElementosFaceta, Dictionary<string, string> pParametrosElementos, int pLimite, int pLimiteOriginal, Faceta pFaceta)
         {
             string idPanel = NormalizarNombreFaceta(pClaveFaceta);
-            string claveFacetaANSI = pClaveFaceta;
-            string Titulo = pTitulo;
-
-            //Obtengo la url a la que hay que redireccionar en caso de que estemos en la home de una comunidad
-            string url = "";
-            string accion = "";
-            if (mFacetasHomeCatalogo)
-            {
-                url = ObtenerUrlPaginaActual(pFaceta);
-                accion = "document.location = '" + url + "?";
-            }
-
+          
             if (pElementosFaceta != null && pElementosFaceta.Count > 0 && (pFaceta.AlgoritmoTransformacion.Equals(TiposAlgoritmoTransformacion.CalendarioConRangos) || pFaceta.AlgoritmoTransformacion.Equals(TiposAlgoritmoTransformacion.Calendario)))
             {
                 pLimite = pElementosFaceta.Count + 1;
@@ -9149,19 +8749,19 @@ namespace ServicioCargaFacetas
 
             if (!string.IsNullOrEmpty(consultaReciproca))
             {
-                claveFaceta = FacetadoAD.PARTE_FILTRO_RECIPROCO + "@@@" + claveFaceta;
+                claveFaceta = $"{FacetadoAD.PARTE_FILTRO_RECIPROCO}@@@{claveFaceta}";
             }
 
             facetaModel.FacetKey = claveFaceta;
-            if (GruposPorTipo && pFaceta != null && claveFaceta != "rdf:type" && !FacetasComunesGrupos.Contains(claveFaceta) && !pClaveFaceta.StartsWith(pFaceta.ObjetoConocimiento + ";"))
+            if (GruposPorTipo && pFaceta != null && claveFaceta != "rdf:type" && !FacetasComunesGrupos.Contains(claveFaceta) && !pClaveFaceta.StartsWith($"{pFaceta.ObjetoConocimiento};"))
             {
                 if (mFaceta != null && mFaceta.Equals(pClaveFaceta) && mListaFiltrosConGrupos.ContainsKey("default;rdf:type") && mListaFiltrosConGrupos["default;rdf:type"].Count == 1)
                 {
-                    facetaModel.FacetKey = mListaFiltrosConGrupos["default;rdf:type"][0] + ";" + pClaveFaceta;
+                    facetaModel.FacetKey = $"{mListaFiltrosConGrupos["default;rdf:type"][0]};{pClaveFaceta}";
                 }
                 else
                 {
-                    facetaModel.FacetKey = pFaceta.ObjetoConocimiento + ";" + pClaveFaceta;
+                    facetaModel.FacetKey = $"{pFaceta.ObjetoConocimiento};{pClaveFaceta}";
                 }
             }
 
@@ -9235,7 +8835,7 @@ namespace ServicioCargaFacetas
 
                             if (pFaceta.MultiIdioma)
                             {
-                                parametro += "@" + UtilIdiomas.LanguageCode;
+                                parametro += $"@{UtilIdiomas.LanguageCode}";
                             }
 
                             string parametroComprobar = parametro;
@@ -9256,7 +8856,7 @@ namespace ServicioCargaFacetas
                             }
 
                             if (((filtrosFacetas == null) || ((!filtrosFacetas.Contains(parametroComprobar)) && !filtrosFacetas.Contains(parametroComprobar)) || (filtrosUsuarios == null) || ((!filtrosUsuarios.Contains(parametroComprobar)) && !filtrosUsuarios.Contains(parametroComprobar)))
-                                && ((filtrosFacetas == null) || !string.IsNullOrEmpty(parametroComprobar) || !filtrosFacetas.Contains(FacetadoAD.FILTRO_SIN_ESPECIFICAR)))//filtro sin especificar
+                                && ((filtrosFacetas == null) || !string.IsNullOrEmpty(parametroComprobar) || !filtrosFacetas.Contains(FacetadoAD.FILTRO_SIN_ESPECIFICAR)))
                             {
                                 string tempParametroSinMultiIdioma = string.Empty;
                                 if (pFaceta.MultiIdioma)
@@ -9336,8 +8936,6 @@ namespace ServicioCargaFacetas
                 foreach (FacetItemModel itemFaceta in facetaModel.FacetItemList)
                 {
                     string urlActual = itemFaceta.Filter.Replace("default;rdf:type", "rdf:type");
-                    //Si no es el actual le ponemos el default;
-
                     string tipoActual = itemFaceta.Name.Replace("rdf:type=", "");
 
                     if (tipoActual != tipoPorDefectoActual)
@@ -9364,7 +8962,6 @@ namespace ServicioCargaFacetas
                         }
                     }
                     itemFaceta.Filter = urlActual;
-                    //itemFaceta.Name = urlActual.Substring(urlActual.IndexOf("?") + 1);
                 }
             }
 
@@ -9485,11 +9082,13 @@ namespace ServicioCargaFacetas
 
             return dicParametros.ContainsKey("ConfigBBDDAutocompletarProyecto") && short.Parse(dicParametros["ConfigBBDDAutocompletarProyecto"]) == (short)TipoBusquedasAutocompletar.Virtuoso;
         }
+
         [NonAction]
         private FacetItemModel AgregarElementoAFaceta(string pClaveFaceta, string pNombre, string pClaveParametro, int pNumeroResultados, bool pPintarX, bool pEsNombreContexto, TiposAlgoritmoTransformacion pTipoAlgoritmoTransformacion)
         {
             return AgregarElementoAFaceta(pClaveFaceta, pNombre, pClaveParametro, pNumeroResultados, pPintarX, 0, false, 0, null, pEsNombreContexto, null, pTipoAlgoritmoTransformacion);
         }
+
         [NonAction]
         private FacetItemModel AgregarElementoAFaceta(string pClaveFaceta, string pNombre, string pClaveParametro, int pNumeroResultados, bool pPintarX, int pNivel, bool pEsArbol, int pPixelesIndentado, List<string> pListaElementosExpandidos, bool pEsNombreContexto, Dictionary<string, string> pParametrosElementos, TiposAlgoritmoTransformacion pTipoAlgoritmoTransformacion, TipoPropiedadFaceta pTipoPropiedadFaceta = TipoPropiedadFaceta.NULL)
         {
@@ -9585,7 +9184,7 @@ namespace ServicioCargaFacetas
                 }
                 else
                 {
-                    urlFiltro = "/" + UtilIdiomas.GetText("URLSEM", "MENSAJES");
+                    urlFiltro = $"/{UtilIdiomas.GetText("URLSEM", "MENSAJES")}";
                 }
 
                 string bandeja = "recibidos";
@@ -9602,7 +9201,7 @@ namespace ServicioCargaFacetas
                     pNombre = GetText("BANDEJAENTRADA", "ELIMINADOS");
                 }
 
-                urlFiltro = urlFiltro + "?" + bandeja;
+                urlFiltro = $"{urlFiltro}?{bandeja}";
             }
             else
             {
@@ -9610,11 +9209,11 @@ namespace ServicioCargaFacetas
                 {
                     if (mFaceta != null && mFaceta.Equals(pClaveFaceta) && mListaFiltrosConGrupos.ContainsKey("default;rdf:type") && mListaFiltrosConGrupos["default;rdf:type"].Count == 1)
                     {
-                        pClaveFaceta = mListaFiltrosConGrupos["default;rdf:type"][0] + ";" + pClaveFaceta;
+                        pClaveFaceta = $"{mListaFiltrosConGrupos["default;rdf:type"][0]};{pClaveFaceta}";
                     }
                     else
                     {
-                        pClaveFaceta = faceta.ObjetoConocimiento + ";" + pClaveFaceta;
+                        pClaveFaceta = $"{faceta.ObjetoConocimiento};{pClaveFaceta}";
                     }
                 }
 
@@ -9624,19 +9223,19 @@ namespace ServicioCargaFacetas
 
                 if (mTipoBusqueda == TipoBusqueda.Mensajes && string.IsNullOrEmpty(mUrlPagina))
                 {
-                    urlFiltro = "/" + UtilIdiomas.GetText("URLSEM", "MENSAJES") + urlFiltro;
+                    urlFiltro = $"/{UtilIdiomas.GetText("URLSEM", "MENSAJES")}{urlFiltro}";
                 }
 
-                nameFiltro = pClaveFaceta + "=" + claveParametro;
-                string nameFiltroURL = pClaveFaceta + "=" + claveParametroURL;
+                nameFiltro = $"{pClaveFaceta}={claveParametro}";
+                string nameFiltroURL = $"{pClaveFaceta}={claveParametroURL}";
 
                 if (pPintarX && GruposPorTipo && pNumeroResultados == -1)
                 {
                     if (faceta != null && faceta.ClaveFaceta == "rdf:type" && mListaFiltrosConGrupos.ContainsKey("default;rdf:type") && mListaFiltrosConGrupos["default;rdf:type"].Count == 1 && mListaFiltrosConGrupos["default;rdf:type"][0] == pClaveParametro)
                     {
-                        urlFiltro = urlFiltro.Replace("default;" + nameFiltroURL, "").Trim('&');
+                        urlFiltro = urlFiltro.Replace($"default;{nameFiltroURL}", "").Trim('&');
                         urlFiltro = urlFiltro.Replace(nameFiltroURL, "").Trim('&');
-                        nameFiltro = "default;" + nameFiltro;
+                        nameFiltro = $"default;{nameFiltro}";
                     }
                     else
                     {
@@ -9683,7 +9282,6 @@ namespace ServicioCargaFacetas
         }
 
         [NonAction]
-
         private int PasarAEntero(string pCadena)
         {
             int entero = 0;
@@ -9700,6 +9298,7 @@ namespace ServicioCargaFacetas
             }
             return entero;
         }
+
         [NonAction]
         private void AgregarCategoriasHijasALista(CategoriaTesauro pCategoria, List<Guid> pListaCategorias)
         {
@@ -9781,7 +9380,7 @@ namespace ServicioCargaFacetas
         [NonAction]
         private string ObtenerPropTesSem(FacetadoDS pFacetadoDS, string pPropiedad, string pElemento)
         {
-            DataRow[] filas = pFacetadoDS.Tables[0].Select("s='" + pElemento + "' AND p='" + pPropiedad + "'");
+            DataRow[] filas = pFacetadoDS.Tables[0].Select($"s='{pElemento}' AND p='{pPropiedad}'");
 
             if (filas.Length > 0)
             {
@@ -9825,7 +9424,7 @@ namespace ServicioCargaFacetas
         [NonAction]
         private List<string> ObtenerPropTesSemList(FacetadoDS pFacetadoDS, string pPropiedad, string pElemento)
         {
-            DataRow[] filas = pFacetadoDS.Tables[0].Select("s='" + pElemento + "' AND p='" + pPropiedad + "'");
+            DataRow[] filas = pFacetadoDS.Tables[0].Select($"s='{pElemento}' AND p='{pPropiedad}'");
             List<string> listaPropiedadesSemanticas = new List<string>();
             foreach (DataRow dr in filas)
             {
@@ -9842,17 +9441,17 @@ namespace ServicioCargaFacetas
 
             return null;
         }
+
         [NonAction]
         private int rangoaproximado(int rango)
         {
             int rangoaproximado = 0;
             if (rango < 10)
             {
-                return rangoaproximado = rango;
+                rangoaproximado = rango;
             }
             if (rango >= 10 && rango < 1000)
             {
-
                 while (rango % 10 != 0) { rango = rango - 1; }
                 rangoaproximado = rango;
             }
@@ -9879,6 +9478,7 @@ namespace ServicioCargaFacetas
             }
             return rangoaproximado;
         }
+
         [NonAction]
         private List<int> CalcularRangos(int pMax, int pMin)
         {
@@ -9904,20 +9504,15 @@ namespace ServicioCargaFacetas
         public string ObtenerUrlPaginaActual(Faceta pFaceta)
         {
             string url = mUrlPagina;
-            if (mFacetasHomeCatalogo/* || string.IsNullOrEmpty(url)*/)
+            if (mFacetasHomeCatalogo)
             {
-                //url = GnossUrlsSemanticas.GetURLBaseRecursos(UtilServicios.UrlIntragnoss, UtilIdiomas, FilaProyecto.NombreCorto, "/", false);
-                url = "/" + GetText("URLSEM", "RECURSOS");
+                url = $"/{GetText("URLSEM", "RECURSOS")}";
 
                 if (pFaceta != null && (((pFaceta.FilaElementoEntity is FacetaHome || pFaceta.FilaElementoEntity is FacetaFiltroHome) && !string.IsNullOrEmpty(pFaceta.PestanyaFaceta)) || !string.IsNullOrEmpty(mPestanyaFacetaCMS)))
                 {
-                    //url = GnossUrlsSemanticas.GetURLBaseRecursos(UtilServicios.UrlIntragnoss, UtilIdiomas, FilaProyecto.NombreCorto, "/", false);
-
                     if (!string.IsNullOrEmpty(pFaceta.PestanyaFaceta) || !string.IsNullOrEmpty(mPestanyaFacetaCMS))
                     {
-                        //url = GnossUrlsSemanticas.ObtenerURLComunidad(UtilIdiomas, UtilServicios.UrlIntragnoss, FilaProyecto.NombreCorto);
-
-                        string pagina = "";
+                        string pagina = String.Empty;
 
                         if (!string.IsNullOrEmpty(mPestanyaFacetaCMS))
                         {
@@ -9953,7 +9548,7 @@ namespace ServicioCargaFacetas
                             pagina = GetText("URLSEM", "PERSONASYORGANIZACIONES");
                         }
 
-                        url = "/" + pagina;
+                        url = $"/{pagina}";
                     }
                 }
             }
@@ -9973,9 +9568,8 @@ namespace ServicioCargaFacetas
             {
                 Es.Riam.Gnoss.AD.EntityModel.Models.ProyectoDS.ProyectoPestanyaBusqueda filaPestaña = PestanyasProyectoDW.ListaProyectoPestanyaBusqueda.FirstOrDefault(proy => proy.CampoFiltro.Equals(mParametros_adiccionales));
                 url = mControladorBase.UrlsSemanticas.ObtenerURLComunidad(UtilIdiomas, pUrlBase, FilaProyecto.NombreCorto);
-                url += "/" + filaPestaña.ProyectoPestanyaMenu.Ruta;
+                url += $"/{filaPestaña.ProyectoPestanyaMenu.Ruta}";
             }
-
             return url;
         }
 
@@ -9996,11 +9590,11 @@ namespace ServicioCargaFacetas
                     url = url.Substring(0, url.IndexOf("?"));
                 }
 
-                if (url.Contains("/" + GetText("URLSEM", "COMUNIDAD") + "/"))
+                if (url.Contains($"/{GetText("URLSEM", "COMUNIDAD")}/"))
                 {
                     string urlAux = url;
-                    url = url.Substring(0, url.IndexOf("/" + GetText("URLSEM", "COMUNIDAD") + "/") + ("/" + GetText("URLSEM", "COMUNIDAD") + "/").Length);
-                    urlAux = urlAux.Substring(urlAux.IndexOf("/" + GetText("URLSEM", "COMUNIDAD") + "/") + ("/" + GetText("URLSEM", "COMUNIDAD") + "/").Length);
+                    url = url.Substring(0, url.IndexOf($"/{GetText("URLSEM", "COMUNIDAD")}/") + ($"/{GetText("URLSEM", "COMUNIDAD")}/").Length);
+                    urlAux = urlAux.Substring(urlAux.IndexOf($"/{GetText("URLSEM", "COMUNIDAD")}/") + ($"/{GetText("URLSEM", "COMUNIDAD")}/").Length);
                     string[] urlAuxArray = urlAux.Split('/');
 
                     if (urlAuxArray[1] == GetText("URLSEM", "CATEGORIA"))
@@ -10009,7 +9603,7 @@ namespace ServicioCargaFacetas
 
                         if (!pFiltro.Contains("skos:ConceptID="))
                         {
-                            url += "/" + GetText("URLSEM", "BUSQUEDAAVANZADA");
+                            url += $"/{GetText("URLSEM", "BUSQUEDAAVANZADA")}";
                         }
                     }
                     else
@@ -10018,23 +9612,23 @@ namespace ServicioCargaFacetas
 
                         if (urlAuxArray[1] != GetText("URLSEM", "BUSQUEDAAVANZADA") || !pFiltro.Contains("skos:ConceptID="))
                         {
-                            url += "/" + urlAuxArray[1];
+                            url += $"/{urlAuxArray[1]}";
                         }
                     }
                 }
 
                 if (pFiltro.Contains("sioc_t:Tag="))
                 {
-                    url += "/" + GetText("URLSEM", "TAG") + "/" + pFiltro.Replace("sioc_t:Tag=", "");
+                    url += $"/{GetText("URLSEM", "TAG")}/{pFiltro.Replace("sioc_t:Tag=", "")}";
                 }
                 else if (pFiltro.Contains("skos:ConceptID=") && pParametrosElementos != null && pParametrosElementos.ContainsKey(pFiltro.Replace("skos:ConceptID=", "")))
                 {
 
-                    url += "/" + GetText("URLSEM", "CATEGORIA") + "/" + UtilCadenas.EliminarCaracteresUrlSem(pParametrosElementos[pFiltro.Replace("skos:ConceptID=", "")]) + "/" + pFiltro.Replace("skos:ConceptID=gnoss:", "");
+                    url += $"/{GetText("URLSEM", "CATEGORIA")}/{UtilCadenas.EliminarCaracteresUrlSem(pParametrosElementos[pFiltro.Replace("skos:ConceptID=", "")])}/{pFiltro.Replace("skos:ConceptID=gnoss:", "")}";
                 }
                 else
                 {
-                    url += "?" + pFiltro;
+                    url += $"?{pFiltro}";
                 }
             }
             else
@@ -10048,7 +9642,7 @@ namespace ServicioCargaFacetas
                     {
                         if (!filtro.Contains("pagina="))
                         {
-                            url += HttpUtility.UrlDecode(filtro) + "&";
+                            url += $"{HttpUtility.UrlDecode(filtro)}&";
                         }
                     }
 
@@ -10056,55 +9650,21 @@ namespace ServicioCargaFacetas
                 }
 
                 CultureInfo culture = Thread.CurrentThread.CurrentCulture;
-                if (pFiltro.Contains('=') && url != null && /*url.Contains(pFiltro)*/ culture.CompareInfo.IndexOf(url, pFiltro, CompareOptions.IgnoreCase) >= 0)
+                if (pFiltro.Contains('=') && url != null && culture.CompareInfo.IndexOf(url, pFiltro, CompareOptions.IgnoreCase) >= 0)
                 {
                     if (pFaceta != null && pFaceta.AlgoritmoTransformacion != TiposAlgoritmoTransformacion.TesauroSemantico && pFaceta.AlgoritmoTransformacion != TiposAlgoritmoTransformacion.TesauroSemanticoOrdenado)
                     {
-                        //El filtro ya está presente en la url, lo quito
-                        //if (url.Contains(pFiltro + "&"))
-                        if (culture.CompareInfo.IndexOf(url, pFiltro + "&", CompareOptions.IgnoreCase) >= 0)
+                        if (culture.CompareInfo.IndexOf(url, $"{pFiltro}&", CompareOptions.IgnoreCase) >= 0)
                         {
-                            // El filtro está antes de otro filtro, lo quito junto con un & de después para que la url sea correcta 
-                            // Ej: ?sioc_t:Tag=educación&gnoss:autor=Equipo GNOSS se queda en ?gnoss:autor=Equipo GNOSS
-                            //Regex regex = new Regex(pFiltro + "&", RegexOptions.IgnoreCase);
-                            //url = regex.Replace(url, "");
-                            //url = url.Replace(pFiltro + "&", "");
-
-                            url = RemplazoInsensitivo(url, pFiltro + "&", "");
+                            url = RemplazoInsensitivo(url, $"{pFiltro}&", "");
                         }
-                        //else if (url.Contains("&" + pFiltro))
-                        else if (culture.CompareInfo.IndexOf(url, "&" + pFiltro, CompareOptions.IgnoreCase) >= 0 && url.Substring(culture.CompareInfo.IndexOf(url, "&" + pFiltro, CompareOptions.IgnoreCase) + ("&" + pFiltro).Length).Length == 0)
-                        {
-                            // El filtro está al final de más filtros, lo quito junto con un & antes para que la url sea correcta 
-                            // Ej: ?gnoss:autor=Equipo GNOSS&sioc_t:Tag=educación se queda en ?gnoss:autor=Equipo GNOSS
-                            //Regex regex = new Regex("&" + pFiltro, RegexOptions.IgnoreCase);
-                            //url = regex.Replace(url, "");
-                            //url = url.Replace("&" + pFiltro, "");
-
-                            //Asegurarse de que no borra algún filtro similar.
-                            //Ejemplo de la comunidad "ElPrado"
-                            // http://preelprado.gnoss.com/comunidad/elprado/artwork?ecidoc:p62_E52_p79_has_time-span_beginning=19000000-20000000&ecidoc:p62_E52_p79_has_time-span_beginning=19000000-19100000
-                            // Filtro: ecidoc:p62_E52_p79_has_time-span_beginning=19000000
-                            // Resultado: http://preelprado.gnoss.com/comunidad/elprado/artwork?ecidoc:p62_E52_p79_has_time-span_beginning=19000000-20000000-19100000
-
-                            url = RemplazoInsensitivo(url, "&" + pFiltro, "");
+                        else if (culture.CompareInfo.IndexOf(url, $"&{pFiltro}", CompareOptions.IgnoreCase) >= 0 && url.Substring(culture.CompareInfo.IndexOf(url, $"&{pFiltro}", CompareOptions.IgnoreCase) + $"&{pFiltro}".Length).Length == 0)
+                        {   
+                            url = RemplazoInsensitivo(url, $"&{pFiltro}", "");
                         }
-                        //else if (url.Contains("?" + pFiltro))
-                        else if (culture.CompareInfo.IndexOf(url, "?" + pFiltro, CompareOptions.IgnoreCase) >= 0 && url.Substring(culture.CompareInfo.IndexOf(url, "?" + pFiltro, CompareOptions.IgnoreCase) + ("?" + pFiltro).Length).Length == 0)
+                        else if (culture.CompareInfo.IndexOf(url, $"?{pFiltro}", CompareOptions.IgnoreCase) >= 0 && url.Substring(culture.CompareInfo.IndexOf(url, $"?{pFiltro}", CompareOptions.IgnoreCase) + $"?{pFiltro}".Length).Length == 0)
                         {
-                            // Es el único filtro que existe, lo quito con un ? y la url se queda sin filtros 
-                            // Ej: ?gnoss:autor=Equipo GNOSS&sioc_t:Tag=educación se queda en ?gnoss:autor=Equipo GNOSS
-                            //Regex regex = new Regex("?" + pFiltro, RegexOptions.IgnoreCase);
-                            //url = regex.Replace(url, "");
-                            //url = url.Replace("?" + pFiltro, "");
-
-                            //Asegurarse de que no borra algún filtro similar.
-                            //Ejemplo de la comunidad "ElPrado"
-                            // http://preelprado.gnoss.com/comunidad/elprado/artwork?ecidoc:p62_E52_p79_has_time-span_beginning=19000000-20000000
-                            // Filtro: ecidoc:p62_E52_p79_has_time-span_beginning=19000000
-                            // Resultado: http://preelprado.gnoss.com/comunidad/elprado/artwork?-20000000
-
-                            url = RemplazoInsensitivo(url, "?" + pFiltro, "");
+                            url = RemplazoInsensitivo(url, $"?{pFiltro}", "");
                         }
                         else
                         {
@@ -10134,7 +9694,7 @@ namespace ServicioCargaFacetas
                             {
                                 if (!filtroAux.StartsWith(claveFaceta))
                                 {
-                                    url += filtroAux + "&";
+                                    url += $"{filtroAux}&";
                                 }
                             }
                         }
@@ -10150,6 +9710,7 @@ namespace ServicioCargaFacetas
 
             return url;
         }
+
         [NonAction]
         private string ObtenerComposicionUrlGenerica(string pUrl, string pFiltro, Dictionary<string, string> pParametrosElementos, CultureInfo pCulture)
         {
@@ -10157,25 +9718,17 @@ namespace ServicioCargaFacetas
 
             if (tempFiltro.Contains("sioc_t:Tag="))
             {
-                tempFiltro = "/" + GetText("URLSEM", "TAG") + "/" + tempFiltro.Replace("sioc_t:Tag=", "");
+                tempFiltro = $"/{GetText("URLSEM", "TAG")}/{tempFiltro.Replace("sioc_t:Tag=", "")}";
             }
             else if (tempFiltro.Contains("skos:ConceptID=") && pParametrosElementos != null && pParametrosElementos.ContainsKey(tempFiltro.Replace("skos:ConceptID=", "")))
             {
 
-                tempFiltro = "/" + GetText("URLSEM", "CATEGORIA") + "/" + UtilCadenas.EliminarCaracteresUrlSem(pParametrosElementos[tempFiltro.Replace("skos:ConceptID=", "")]) + "/" + tempFiltro.Replace("skos:ConceptID=gnoss:", "");
+                tempFiltro = $"/{GetText("URLSEM", "CATEGORIA")}/{UtilCadenas.EliminarCaracteresUrlSem(pParametrosElementos[tempFiltro.Replace("skos:ConceptID=", "")])}/{tempFiltro.Replace("skos:ConceptID=gnoss:", "")}";
             }
             else
             {
                 tempFiltro = "?" + tempFiltro;
             }
-
-            // Lo quito porque la comprobación se hace en el método anterior...
-            //if (pUrl != null && pCulture.CompareInfo.IndexOf(pUrl, tempFiltro, CompareOptions.IgnoreCase) >= 0)
-            //{
-            //    pUrl = RemplazoInsensitivo(pUrl, tempFiltro, "");
-            //}
-            //else
-            //{
 
             string separador = "?";
             if (pUrl != null && pUrl.Contains('?'))
@@ -10184,10 +9737,9 @@ namespace ServicioCargaFacetas
             }
             pUrl += separador + pFiltro;
 
-            //}
-
             return pUrl;
         }
+
         [NonAction]
         public string RemplazoInsensitivo(string pCadenaBuscar, string pOriginal, string pReplace)
         {
@@ -10209,8 +9761,8 @@ namespace ServicioCargaFacetas
 
         private void IniciarTraza()
         {
-            GnossCacheCL gnossCacheCL = new GnossCacheCL(mEntityContext,mLoggingService,  mRedisCacheWrapper, mConfigService, mServicesUtilVirtuosoAndReplication);
-            object trazaHabilitada = gnossCacheCL.ObtenerDeCache("traza" + mControladorBase.DominoAplicacion);//72horas
+            GnossCacheCL gnossCacheCL = new GnossCacheCL(mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mServicesUtilVirtuosoAndReplication);
+            object trazaHabilitada = gnossCacheCL.ObtenerDeCache($"traza{mControladorBase.DominoAplicacion}");//72horas
 
             if (trazaHabilitada != null && (bool)trazaHabilitada)
             {
@@ -10230,18 +9782,15 @@ namespace ServicioCargaFacetas
         private string ObtenerRutaTraza()
         {
             string ruta = Path.Combine(mEnv.ContentRootPath, "trazas");
-            //string ruta = this.Server.MapPath(ControllerContext.HttpContext.Request.ApplicationPath + "\\trazas");
-
             if (!string.IsNullOrEmpty(mControladorBase.DominoAplicacion))
             {
-                ruta += "\\" + mControladorBase.DominoAplicacion;
+                ruta += $"\\{mControladorBase.DominoAplicacion}";
                 if (!Directory.Exists(ruta))
                 {
                     Directory.CreateDirectory(ruta);
                 }
             }
-
-            ruta += "\\traza_" + DateTime.Now.ToString("yyyy-MM-dd") + ".txt";
+            ruta += $"\\traza_{DateTime.Now.ToString("yyyy-MM-dd")}.txt";
 
             return ruta;
         }
@@ -10262,15 +9811,14 @@ namespace ServicioCargaFacetas
             //Hago una copia porque el DataSet va a ser modificado y es el mismo para todas las peticiones
             facetaDW = facetaDW.Copy();
             mLoggingService.AgregarEntrada("Data set copiado");
-
-            this.mGestorFacetas = new GestionFacetas(facetaDW, mLoggingService);
+            mGestorFacetas = new GestionFacetas(facetaDW, mLoggingService);
 
             // Si en algún proyecto no se quieren sacar facetas de múltiples recursos, usar el parámetro ParametroAD.OcultarFacetatasDeOntologiasEnRecursosCuandoEsMultiple
-            this.mGestorFacetas.MontarFacetasHome = mFacetasHomeCatalogo && string.IsNullOrEmpty(mPestanyaFacetaCMS);
-
+            mGestorFacetas.MontarFacetasHome = mFacetasHomeCatalogo && string.IsNullOrEmpty(mPestanyaFacetaCMS);
             GestorFacetasOriginal = new GestionFacetas(mGestorFacetas.FacetasDW.Copy(), mLoggingService);
-            GestorFacetasOriginal.MontarFacetasHome = this.mGestorFacetas.MontarFacetasHome;
+            GestorFacetasOriginal.MontarFacetasHome = mGestorFacetas.MontarFacetasHome;
         }
+
         [NonAction]
         private void EstablecerOrganizacionIDDeProyectoID(Guid pProyectoID)
         {
@@ -10344,6 +9892,7 @@ namespace ServicioCargaFacetas
 
             return dic;
         }
+        
         [NonAction]
         private AutocompleteBehaviours ObtenerBehaviourDeComportamiento(TipoMostrarSoloCaja pComportamiento)
         {
@@ -10356,6 +9905,7 @@ namespace ServicioCargaFacetas
 
             return comportamientoAutocompletar;
         }
+
         [NonAction]
         private void MontarFiltroItemFaceta(FacetItemModel pItemFaceta, string pUrlBaseFacetas)
         {
@@ -10557,6 +10107,7 @@ namespace ServicioCargaFacetas
                     }
                 }
             }
+
             mListaFiltros.Remove("default;rdf:type");
 
             mListaFiltrosFacetasUsuarioConGrupos = new Dictionary<string, List<string>>(mListaFiltrosFacetasUsuario);
@@ -10566,6 +10117,7 @@ namespace ServicioCargaFacetas
             {
                 listaClavesFacetasUsuarios.Add(clave);
             }
+
             //Eliminamos los prefijos de los tipos (que no sean el de por defecto)
             foreach (string clave in listaClavesFacetasUsuarios)
             {
@@ -10586,13 +10138,11 @@ namespace ServicioCargaFacetas
                     }
                     else
                     {
-                        //Desechamos esos tipos
                         mListaFiltrosFacetasUsuario.Remove(clave);
                     }
 
                     if (mListaFiltrosFacetasUsuario.ContainsKey("default;rdf:type"))
                     {
-                        //Si se filtra por ese tipo no se desecha
                         string filtroActual = mListaFiltrosFacetasUsuario["default;rdf:type"][0];
 
                         if (filtroActual == clave.Substring(0, clave.IndexOf(separadorFacetaPorTipo)))
@@ -10943,7 +10493,7 @@ namespace ServicioCargaFacetas
         {
             get
             {
-                return !(this.ParametroProyecto.ContainsKey("CacheFacetas") && this.ParametroProyecto["CacheFacetas"].Equals("0"));
+                return !(ParametroProyecto.ContainsKey("CacheFacetas") && ParametroProyecto["CacheFacetas"].Equals("0"));
             }
         }
 
@@ -11000,7 +10550,7 @@ namespace ServicioCargaFacetas
                 string baseUrlIdioma = BaseURL;
                 if (!string.IsNullOrEmpty(ParametrosGenerales.IdiomaDefecto) && UtilIdiomas.LanguageCode != ParametrosGenerales.IdiomaDefecto)
                 {
-                    baseUrlIdioma += "/" + UtilIdiomas.LanguageCode;
+                    baseUrlIdioma += $"/{UtilIdiomas.LanguageCode}";
                 }
                 return baseUrlIdioma;
             }
@@ -11167,7 +10717,6 @@ namespace ServicioCargaFacetas
 
                                 if (consultaCache != null)
                                 {
-                                    Dictionary<string, Tuple<string, string, string, bool>> diccionarioAuxiliar = new Dictionary<string, Tuple<string, string, string, bool>>();
                                     Tuple<string, string, string, bool> tuplaAuxiliar = new Tuple<string, string, string, bool>(consultaCache.WhereSPARQL, consultaCache.OrderBy, consultaCache.WhereFacetasSPARQL, consultaCache.OmitirRdfType);
                                     mFiltrosSearchPersonalizados.Add(fila.NombreFiltro, tuplaAuxiliar);
                                 }
@@ -11192,8 +10741,6 @@ namespace ServicioCargaFacetas
                 }
             }
         }
-
-        private static object mBloqueoFiltrosSearchPersonalizados = new object();
 
         /// <summary>
         /// Diccionario con los filtros tipo 'search' personalizados

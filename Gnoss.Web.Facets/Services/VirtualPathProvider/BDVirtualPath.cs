@@ -19,6 +19,12 @@ namespace Gnoss.Web.Services.VirtualPathProvider
         private IServicesUtilVirtuosoAndReplication _servicesUtilVirtuosoAndReplication;
         public static ConcurrentDictionary<string, string> ListaRutasVirtuales { get; } = new ConcurrentDictionary<string, string>();
         private static Dictionary<Guid, string> ListaHtmlsTemporales = new Dictionary<Guid, string>();
+        private static List<string> ViewImports = new List<string>()
+        {
+            "@using Es.Riam.Util",
+            "@using Es.Riam.Gnoss.Web.MVC.Models",
+            "@using Es.Riam.Gnoss.Web.MVC.Controles.Helper"
+        };
 
         public BDVirtualPath(EntityContext entityContext, LoggingService loggingService, ConfigService configService, IServicesUtilVirtuosoAndReplication servicesUtilVirtuosoAndReplication)
         {
@@ -111,7 +117,11 @@ namespace Gnoss.Web.Services.VirtualPathProvider
                                 //    virtualPath = virtualPath.Replace("Views", DirectorioVistas);
                                 //}
                             }
-
+                            if (!html.Contains(ViewImports.First()))
+                            {
+                                string textoInicial = string.Join("\r\n", ViewImports) + "\r\n";
+                                html = textoInicial + html;
+                            }
                             try
                             {
                                 ListaRutasVirtuales.TryAdd(virtualPath, html);
