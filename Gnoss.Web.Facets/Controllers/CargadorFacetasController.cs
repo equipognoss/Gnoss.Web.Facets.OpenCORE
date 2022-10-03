@@ -381,6 +381,14 @@ namespace ServicioCargaFacetas
             //MyVirtualPathProvider.listaRutasVirtuales.Clear();
             return View();
         }
+
+        [HttpGet, HttpPost]
+        [Route("InvalidarCacheLocal")]
+        public void InvalidarCacheLocal([FromForm] string pProyectoID)
+        {
+            mGnossCache.VersionarCacheLocal(new Guid(pProyectoID));
+        }
+
         [NonAction]
         private string ObtenerUrlPorFiltros(TipoBusqueda pTipoBusqueda, string pParametros)
         {
