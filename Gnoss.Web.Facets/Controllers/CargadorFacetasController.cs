@@ -1336,7 +1336,7 @@ namespace ServicioCargaFacetas
 
             mFormulariosSemanticos = mUtilServiciosFacetas.ObtenerFormulariosSemanticos(mTipoBusqueda, mOrganizacionID, mProyectoID);
 
-            if (mListaItemsBusqueda.Count > 0 && !mListaFiltros.ContainsKey("rdf:type") && FilaPestanyaBusquedaActual != null && !string.IsNullOrEmpty(FilaPestanyaBusquedaActual.CampoFiltro) && (FilaPestanyaBusquedaActual.CampoFiltro.Contains("rdf:type") || !(mListaItemsBusqueda.Count == 1 && mListaItemsBusqueda[0] == "Recurso")))
+            if (mListaItemsBusqueda.Count > 0 && !mListaFiltros.ContainsKey("rdf:type") && (FilaPestanyaBusquedaActual == null || string.IsNullOrEmpty(FilaPestanyaBusquedaActual.CampoFiltro) || FilaPestanyaBusquedaActual.CampoFiltro.Contains("rdf:type") || !(mListaItemsBusqueda.Count == 1 && mListaItemsBusqueda[0] == "Recurso")))
             {
                 mListaFiltros.Add("rdf:type", mListaItemsBusqueda);
             }
