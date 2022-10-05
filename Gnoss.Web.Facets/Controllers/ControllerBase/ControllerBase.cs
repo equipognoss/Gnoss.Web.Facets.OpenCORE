@@ -126,7 +126,7 @@ namespace ServicioCargaFacetas
         public override void OnActionExecuting(ActionExecutingContext filterContext)
         {
 #if !DEBUG
-            if (mConfigService.PeticionHttps())
+            if (mConfigService.PeticionHttps() && !((Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor)filterContext.ActionDescriptor).ActionName.Contains("Cache"))
             {
                 Guid identidadID = Guid.Parse(Request.Form["pIdentidadID"]);
 
