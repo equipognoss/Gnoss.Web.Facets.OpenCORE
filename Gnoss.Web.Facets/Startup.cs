@@ -56,8 +56,10 @@ namespace Gnoss.Web.Facetas
                 options.AddPolicy(name: "_myAllowSpecificOrigins",
                                   builder =>
                                   {
-                                      builder.AllowAnyOrigin();
+                                      builder.SetIsOriginAllowed(ComprobarDominioEnBD);
+                                      builder.AllowAnyHeader();
                                       builder.AllowAnyMethod();
+                                      builder.AllowCredentials();
                                   });
             });
 
@@ -192,22 +194,17 @@ namespace Gnoss.Web.Facetas
 
             ConfigurarApplicationInsights(configService);
 
-            //Quitamos los motores de vistas y añadimos nuestro motor Razor personalizado
-            //TODO Mirar
-            /*ViewEngines.Engines.Clear();
-            ViewEngines.Engines.Add(new CustomRazorViewEngine());*/
-
-            //Quitamos los modos de presentacion y dejamos solamente el de por defecto
-            //TODO Mirar
-            //DisplayModeProvider.Instance.Modes.Clear();
-            //DisplayModeProvider.Instance.Modes.Add(new DefaultDisplayMode());
-
             FacetadoAD.EsPeticionFacetas = true;
 
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "Gnoss.Web.Facetas", Version = "v1" });
             });
+        }
+
+        private bool ComprobarDominioEnBD(string dominio)
+        {
+            return true;
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
