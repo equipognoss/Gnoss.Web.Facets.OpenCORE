@@ -5,6 +5,7 @@ using Es.Riam.Gnoss.AD.Facetado;
 using Es.Riam.Gnoss.AD.ParametroAplicacion;
 using Es.Riam.Gnoss.AD.Virtuoso;
 using Es.Riam.Gnoss.CL;
+using Es.Riam.Gnoss.CL.RelatedVirtuoso;
 using Es.Riam.Gnoss.Recursos;
 using Es.Riam.Gnoss.Util.Configuracion;
 using Es.Riam.Gnoss.Util.General;
@@ -79,6 +80,7 @@ namespace Gnoss.Web.Facetas
             services.AddScoped(typeof(BDVirtualPath));
             services.AddScoped<IUtilServicioIntegracionContinua, UtilServicioIntegracionContinuaOpen>();
             services.AddScoped<IServicesUtilVirtuosoAndReplication, ServicesVirtuosoAndBidirectionalReplicationOpen>();
+            services.AddScoped(typeof(RelatedVirtuosoCL));
             string bdType = "";
             IDictionary environmentVariables = Environment.GetEnvironmentVariables();
             if (environmentVariables.Contains("connectionType"))
