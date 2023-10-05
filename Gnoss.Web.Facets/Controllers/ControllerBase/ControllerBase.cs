@@ -128,7 +128,18 @@ namespace ServicioCargaFacetas
 #if !DEBUG
             if (mConfigService.PeticionHttps() && !((Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor)filterContext.ActionDescriptor).ActionName.Contains("Cache"))
             {
-                Guid identidadID = Guid.Parse(Request.Form["pIdentidadID"]);
+                Guid identidadID = Guid.Empty;
+                Guid.TryParse(Request.Form["pIdentidadID"], out identidadID);
+
+                if (identidadID.Equals(Guid.Empty))
+                {
+                    Guid.TryParse(Request.Form["identidad"], out identidadID);
+
+                    if (identidadID.Equals(Guid.Empty))
+                    {
+                        identidadID = UsuarioAD.Invitado;
+                    }
+                }
 
                 if (!identidadID.Equals(UsuarioAD.Invitado))
                 {

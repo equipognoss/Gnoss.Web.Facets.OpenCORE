@@ -17,6 +17,7 @@ using Es.Riam.Gnoss.CL.ParametrosProyecto;
 using Es.Riam.Gnoss.CL.Seguridad;
 using Es.Riam.Gnoss.CL.ServiciosGenerales;
 using Es.Riam.Gnoss.CL.Tesauro;
+using Es.Riam.Gnoss.CL.Trazas;
 using Es.Riam.Gnoss.Elementos.Facetado;
 using Es.Riam.Gnoss.Elementos.Identidad;
 using Es.Riam.Gnoss.Elementos.ParametroGeneralDSEspacio;
@@ -313,6 +314,7 @@ namespace ServicioCargaFacetas
 
         private string mBaseUrl = "";
 
+        private List<Guid> mListaExcluidos = null;
         #endregion
 
         /// <summary>
@@ -348,6 +350,8 @@ namespace ServicioCargaFacetas
         private UtilServiciosFacetas mUtilServiciosFacetas;
         private IHostingEnvironment mEnv;
         private IServicesUtilVirtuosoAndReplication mServicesUtilVirtuosoAndReplication;
+        private static object BLOQUEO_COMPROBACION_TRAZA = new object();
+        private static DateTime HORA_COMPROBACION_TRAZA;
 
         #region Constructor
 
@@ -379,6 +383,8 @@ namespace ServicioCargaFacetas
         {
             //TODO Javier
             //MyVirtualPathProvider.listaRutasVirtuales.Clear();
+            VistaVirtualCL vistaVirtualCL = new VistaVirtualCL(mEntityContext, mLoggingService, mGnossCache, mRedisCacheWrapper, mConfigService, mServicesUtilVirtuosoAndReplication);
+            vistaVirtualCL.InvalidarVistasVirtualesEcosistemaEnCacheLocal();
             return View();
         }
 
@@ -429,7 +435,7 @@ namespace ServicioCargaFacetas
         /// <returns></returns>
         [HttpGet, HttpPost]
         [Route("CargarFacetas")]
-        public ActionResult CargarFacetas([FromForm] string pProyectoID, [FromForm] bool pEstaEnProyecto, [FromForm] bool pEsUsuarioInvitado, [FromForm] string pIdentidadID, [FromForm] string pParametros, [FromForm] string pUbicacionBusqueda, [FromForm] string pLanguageCode, [FromForm] bool pAdministradorVeTodasPersonas, [FromForm] short pTipoBusqueda, [FromForm] int? pNumeroFacetas, [FromForm] string pFaceta, [FromForm] string pGrafo, [FromForm] string pParametros_adiccionales, [FromForm] string pFiltroContexto, [FromForm] string pUrlPaginaActual, [FromForm] bool pUsarMasterParaLectura, [FromForm] bool? pJson, [FromForm] string tokenAfinidad)
+        public ActionResult CargarFacetas([FromForm] string pProyectoID, [FromForm] bool pEstaEnProyecto, [FromForm] bool pEsUsuarioInvitado, [FromForm] string pIdentidadID, [FromForm] string pParametros, [FromForm] string pUbicacionBusqueda, [FromForm] string pLanguageCode, [FromForm] bool pAdministradorVeTodasPersonas, [FromForm] short pTipoBusqueda, [FromForm] int? pNumeroFacetas, [FromForm] string pFaceta, [FromForm] string pGrafo, [FromForm] string pParametros_adiccionales, [FromForm] string pFiltroContexto, [FromForm] string pUrlPaginaActual, [FromForm] bool pUsarMasterParaLectura, [FromForm] bool? pJson, [FromForm] string tokenAfinidad, [FromForm] string pListaRecursosExcluidos)
         {
             try
             {
@@ -474,6 +480,7 @@ namespace ServicioCargaFacetas
                 pGrafo = pGrafo?.Replace("\"", "");
                 pParametros_adiccionales = pParametros_adiccionales.Replace("\"", "");
                 mLanguageCode = pLanguageCode;
+                mListaExcluidos = ObtenerListaDeExcluidos(pListaRecursosExcluidos);
 
                 if (!string.IsNullOrEmpty(pUrlPaginaActual))
                 {
@@ -572,7 +579,7 @@ namespace ServicioCargaFacetas
                 bool esMovil = mControladorBase.RequestParams("esMovil") == "true";
 
                 //Obtenemos las facetas y los filtros
-                FacetedModel facModel = CargarFacetasInt(proyectoID, pEstaEnProyecto, pEsUsuarioInvitado, identidadID, pParametros, pUbicacionBusqueda, pLanguageCode, pAdministradorVeTodasPersonas, (TipoBusqueda)pTipoBusqueda, pNumeroFacetas.Value, pFaceta, pGrafo, pParametros_adiccionales, pFiltroContexto, esMovil);
+                FacetedModel facModel = CargarFacetasInt(proyectoID, pEstaEnProyecto, pEsUsuarioInvitado, identidadID, pParametros, pUbicacionBusqueda, pLanguageCode, pAdministradorVeTodasPersonas, (TipoBusqueda)pTipoBusqueda, pNumeroFacetas.Value, pFaceta, pGrafo, pParametros_adiccionales, pFiltroContexto, esMovil, mListaExcluidos);
 
                 string urlBaseFacetas = "";
                 if (ProyectoSeleccionado.Clave.Equals(ProyectoAD.MetaProyecto))
@@ -714,7 +721,7 @@ namespace ServicioCargaFacetas
         /// <returns></returns>
         [HttpGet, HttpPost]
         [Route("RefrescarFacetas")]
-        public ActionResult RefrescarFacetas(string pProyectoID, bool pEstaEnProyecto, bool pEsUsuarioInvitado, string pUbicacionBusqueda, string pLanguageCode, short pTipoBusqueda, int pNumeroFacetas, string pParametros_adiccionales, bool pEsBot, string pFaceta)
+        public ActionResult RefrescarFacetas(string pProyectoID, bool pEstaEnProyecto, bool pEsUsuarioInvitado, string pUbicacionBusqueda, string pLanguageCode, short pTipoBusqueda, int pNumeroFacetas, string pParametros_adiccionales, bool pEsBot, string pFaceta, string pListaRecursosExcluidos = null)
         {
             try
             {
@@ -730,6 +737,7 @@ namespace ServicioCargaFacetas
                     pEsBot = Request.Form["pEsBot"].ToString().ToLower() == "true" ? true : false;
                     pParametros_adiccionales = Request.Form["pParametros_adiccionales"];
                     pFaceta = Request.Form["pFaceta"];
+                    pListaRecursosExcluidos = Request.Form["pListaRecursosExcluidos"];
                 }
 
                 #region Obtenemos parámetros
@@ -739,6 +747,7 @@ namespace ServicioCargaFacetas
                 pLanguageCode = pLanguageCode.Replace("\"", "");
                 pFaceta = pFaceta.Replace("\"", "");
                 pParametros_adiccionales = pParametros_adiccionales.Replace("\"", "");
+                mListaExcluidos = ObtenerListaDeExcluidos(pListaRecursosExcluidos);
 
                 if (pFaceta == "null" || string.IsNullOrEmpty(pFaceta))
                 {
@@ -855,7 +864,7 @@ namespace ServicioCargaFacetas
 
                 bool esMovil = mControladorBase.RequestParams("esMovil") == "true";
 
-                CargarFacetasInt(mProyectoID, pEstaEnProyecto, pEsUsuarioInvitado, new Guid(identidadID), parametros, pUbicacionBusqueda, pLanguageCode, false, (TipoBusqueda)pTipoBusqueda, pNumeroFacetas, pFaceta, grafo, pParametros_adiccionales, "", esMovil);
+                CargarFacetasInt(mProyectoID, pEstaEnProyecto, pEsUsuarioInvitado, new Guid(identidadID), parametros, pUbicacionBusqueda, pLanguageCode, false, (TipoBusqueda)pTipoBusqueda, pNumeroFacetas, pFaceta, grafo, pParametros_adiccionales, "", esMovil, mListaExcluidos);
             }
             catch (ThreadAbortException) { }
             catch (Exception ex)
@@ -904,7 +913,7 @@ namespace ServicioCargaFacetas
         /// <returns></returns>
         [HttpGet, HttpPost]
         [Route("CargarFacetasInt")]
-        public FacetedModel CargarFacetasInt(Guid pProyectoID, bool pEstaEnProyecto, bool pEsUsuarioInvitado, Guid pIdentidadID, string pParametros, string pUbicacionBusqueda, string pLanguageCode, bool pAdministradorVeTodasPersonas, TipoBusqueda pTipoBusqueda, int pNumeroFacetas, string pFaceta, string pGrafo, string pParametros_adiccionales, string pFiltroContexto, bool pEsMovil)
+        public FacetedModel CargarFacetasInt(Guid pProyectoID, bool pEstaEnProyecto, bool pEsUsuarioInvitado, Guid pIdentidadID, string pParametros, string pUbicacionBusqueda, string pLanguageCode, bool pAdministradorVeTodasPersonas, TipoBusqueda pTipoBusqueda, int pNumeroFacetas, string pFaceta, string pGrafo, string pParametros_adiccionales, string pFiltroContexto, bool pEsMovil, List<Guid> pListaExcluidos)
         {
             mProyectoID = pProyectoID;
             List<FacetModel> listaFacetas = new List<FacetModel>();
@@ -915,6 +924,7 @@ namespace ServicioCargaFacetas
 
             if (!pProyectoID.Equals(Guid.Empty))
             {
+                mUtilServicios.ComprobacionCambiosCachesLocales(ProyectoAD.MetaProyecto);
                 mUtilServicios.ComprobacionCambiosCachesLocales(pProyectoID);
             }
 
@@ -1537,7 +1547,7 @@ namespace ServicioCargaFacetas
                     }
                     else
                     {
-                        FacetadoDS facetadoDS = mFacetadoCL.ObtenerFaceta(faceta, pProyectoID, listaItemsBusquedaExtra, false, false, pIdentidadID.Equals(UsuarioAD.Invitado), pIdentidadID, pEsUsuarioInvitado);
+                        FacetadoDS facetadoDS = mFacetadoCL.ObtenerFaceta(faceta, pProyectoID, listaItemsBusquedaExtra, false, false, pIdentidadID.Equals(UsuarioAD.Invitado), pIdentidadID, pEsUsuarioInvitado, pListaExcluidos);
                         //Recorro sus valores y quito los que están negados
                         foreach (DataRow fila in facetadoDS.Tables[0].Rows)
                         {
@@ -1720,7 +1730,7 @@ namespace ServicioCargaFacetas
                     else
                     {
                         //Obtengo de virtuoso la faceta
-                        mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, claveFaceta, mListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), ordenFaceta, 0, numElementosCargar, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, objetoFaceta.Excluyente, false, false, permitirRecursosPrivados, true, objetoFaceta.Reciproca, objetoFaceta.TipoPropiedad, FiltrosSearchPersonalizados, objetoFaceta.Inmutable, pEsMovil);
+                        mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, claveFaceta, mListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), ordenFaceta, 0, numElementosCargar, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, objetoFaceta.Excluyente, false, false, permitirRecursosPrivados, true, objetoFaceta.Reciproca, objetoFaceta.TipoPropiedad, FiltrosSearchPersonalizados, objetoFaceta.Inmutable, pEsMovil, pListaExcluidos);
                     }
 
                     #region Tesauro Semántico
@@ -1820,7 +1830,7 @@ namespace ServicioCargaFacetas
                     mFacetadoCL.DiccionarioFacetasExcluyentes = ObtenerDiccionarioFacetasExcluyentes();
                     mFacetadoCL.MandatoryRelacion = CalcularMandatoryRelacion();
 
-                    KeyValuePair<List<FacetModel>, List<FacetItemModel>> ListaFacetasYFiltros = CrearYCargarFacetas(mListaItemsBusqueda, pUbicacionBusqueda, pNumeroFacetas, mListaFiltros, facetaPrivadaGrupo, permitirRecursosPrivados, pEsMovil);
+                    KeyValuePair<List<FacetModel>, List<FacetItemModel>> ListaFacetasYFiltros = CrearYCargarFacetas(mListaItemsBusqueda, pUbicacionBusqueda, pNumeroFacetas, mListaFiltros, facetaPrivadaGrupo, permitirRecursosPrivados, pEsMovil, pListaExcluidos);
                     listaFacetas = ListaFacetasYFiltros.Key;
                     listaFiltros = ListaFacetasYFiltros.Value;
 
@@ -2284,7 +2294,7 @@ namespace ServicioCargaFacetas
         /// <param name="pNumeroFacetas">Número de facetas a mostar (-1 para cargar desde la 9 hasta la última, -2 para cargar todas a la vez, para bots)</param>
         /// <param name="pListaFiltros">Lista de filtros que ha introducido el usuario</param>
         [NonAction]
-        public KeyValuePair<List<FacetModel>, List<FacetItemModel>> CrearYCargarFacetas(List<string> pListaItemsBusqueda, string pTipoBusqueda, int pNumeroFacetas, Dictionary<string, List<string>> pListaFiltros, bool pFacetaPrivadaGrupo, bool pPermitirRecursosPrivados, bool pEsMovil)
+        public KeyValuePair<List<FacetModel>, List<FacetItemModel>> CrearYCargarFacetas(List<string> pListaItemsBusqueda, string pTipoBusqueda, int pNumeroFacetas, Dictionary<string, List<string>> pListaFiltros, bool pFacetaPrivadaGrupo, bool pPermitirRecursosPrivados, bool pEsMovil, List<Guid> pListaExcluidos)
         {
             List<FacetModel> listaFacetasDevolver = new List<FacetModel>();
             List<FacetItemModel> listaFiltrosDevolver = new List<FacetItemModel>();
@@ -2392,7 +2402,7 @@ namespace ServicioCargaFacetas
             if (mListaFiltros.ContainsKey("search"))
             {
                 //Obtengo la faceta explora
-                mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, "rdf:type", pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), tipodisenio, 0, 25, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, excluyente, false, excluirPersonas, pPermitirRecursosPrivados, false, reciproca, tipoPropiedadFaceta, FiltrosSearchPersonalizados, false, pEsMovil);
+                mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, "rdf:type", pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), tipodisenio, 0, 25, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, excluyente, false, excluirPersonas, pPermitirRecursosPrivados, false, reciproca, tipoPropiedadFaceta, FiltrosSearchPersonalizados, false, pEsMovil, pListaExcluidos);
 
                 //Si la búsqueda obtiene resutlados salimos del bucle
                 if (mFacetadoDS.Tables.Contains("rdf:type") && mFacetadoDS.Tables["rdf:type"].Rows.Count > 0)
@@ -2419,27 +2429,30 @@ namespace ServicioCargaFacetas
                     }
                     else
                     {
-                        mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSComprobacion, "rdf:type", filtrosPagina, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), tipodisenio, 0, 25, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, excluyente, false, excluirPersonas, pPermitirRecursosPrivados, false, reciproca, tipoPropiedadFaceta, FiltrosSearchPersonalizados, false, pEsMovil);
+                        mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSComprobacion, "rdf:type", filtrosPagina, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), tipodisenio, 0, 25, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, excluyente, false, excluirPersonas, pPermitirRecursosPrivados, false, reciproca, tipoPropiedadFaceta, FiltrosSearchPersonalizados, false, pEsMovil, pListaExcluidos);
                     }
                 }
             }
 
             if (!recursosCargados && pListaFiltros.ContainsKey("rdf:type") && pListaFiltros["rdf:type"].Count == 1)
             {
-                //Añadir el tipo rdf:type a la tabla.
-                mFacetadoDS.Tables.Add("rdf:type");
-                mFacetadoDS.Tables["rdf:type"].Columns.Add("rdftype2", typeof(string));
-                mFacetadoDS.Tables["rdf:type"].Columns.Add("a", typeof(string));
+                if (!mFacetadoDS.Tables.Contains("rdf:type"))
+                {
+                    //Añadir el tipo rdf:type a la tabla.
+                    mFacetadoDS.Tables.Add("rdf:type");
+                    mFacetadoDS.Tables["rdf:type"].Columns.Add("rdftype2000", typeof(string));
+                    mFacetadoDS.Tables["rdf:type"].Columns.Add("a", typeof(string));
+                }
 
                 DataRow fila = mFacetadoDS.Tables["rdf:type"].NewRow();
-                fila["rdftype2"] = pListaFiltros["rdf:type"][0];
+                fila["rdftype2000"] = pListaFiltros["rdf:type"][0];
                 fila["a"] = "1";
                 mFacetadoDS.Tables["rdf:type"].Rows.Add(fila);
             }
             else if (!recursosCargados)
             {
                 //Obtengo la faceta explora
-                mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, "rdf:type", pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), tipodisenio, 0, 25, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, excluyente, false, excluirPersonas, pPermitirRecursosPrivados, FiltrosSearchPersonalizados, false, pEsMovil);
+                mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, "rdf:type", pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), tipodisenio, 0, 25, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, excluyente, false, excluirPersonas, pPermitirRecursosPrivados, FiltrosSearchPersonalizados, false, pEsMovil, mListaExcluidos);
 
                 if (mFacetadoDS.Tables.Contains("rdf:type") && mFacetadoDS.Tables["rdf:type"].Rows.Count == 1 && mListaFiltrosFacetasUsuario.Count > 0)
                 {
@@ -2459,7 +2472,7 @@ namespace ServicioCargaFacetas
                     else
                     {
                         mFacetadoCL.FacetadoCN.FacetadoAD.ObtenerContadorDeFaceta = false;
-                        mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSComprobacion, "rdf:type", filtrosPagina, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), tipodisenio, 0, 25, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, excluyente, false, excluirPersonas, pPermitirRecursosPrivados, FiltrosSearchPersonalizados, false, pEsMovil);
+                        mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSComprobacion, "rdf:type", filtrosPagina, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), tipodisenio, 0, 25, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, excluyente, false, excluirPersonas, pPermitirRecursosPrivados, FiltrosSearchPersonalizados, false, pEsMovil, mListaExcluidos);
                         mFacetadoCL.FacetadoCN.FacetadoAD.ObtenerContadorDeFaceta = true;
                     }
                 }
@@ -2825,7 +2838,7 @@ namespace ServicioCargaFacetas
                                                     listaFiltrosAux.Remove(faceta.ClaveFaceta);
                                                 }
 
-                                                mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, faceta.ClaveFaceta, listaFiltrosAux, listaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), faceta.TipoDisenio, 0, 0, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, faceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, omitirPalabrasNoRelevantesSearch, faceta.Reciproca, faceta.TipoPropiedad, FiltrosSearchPersonalizados, faceta.Inmutable, pEsMovil);
+                                                mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, faceta.ClaveFaceta, listaFiltrosAux, listaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), faceta.TipoDisenio, 0, 0, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, faceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, omitirPalabrasNoRelevantesSearch, faceta.Reciproca, faceta.TipoPropiedad, FiltrosSearchPersonalizados, faceta.Inmutable, pEsMovil, pListaExcluidos);
                                                 listaTablas.Add(faceta.ClaveFaceta);
                                             }
                                         }
@@ -2864,8 +2877,23 @@ namespace ServicioCargaFacetas
                                                 }
 
                                                 #endregion
+                                                if (faceta.AlgoritmoTransformacion.Equals(TiposAlgoritmoTransformacion.TesauroSemantico))
+                                                {
+                                                    FacetadoCL facetadoCL = new FacetadoCL(mUtilServicios.UrlIntragnoss, mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
+                                                    FacetadoDS facetadoTesSemDS = facetadoCL.ObtenerModeloTesauroSemanticoDeBusquedaEnProyecto(mGrafoID, faceta.ClaveFaceta, UtilIdiomas.LanguageCode);
+                                                    if (facetadoTesSemDS == null)
+                                                    {
+                                                        FacetadoDS facetadoAux = new FacetadoDS();
+                                                        //Se obtiene la lista de items de búsqueda extra porque necesitamos obtener todos los tesauros de virtuoso para cachearlo. Luego filtramos por el necesario en esta búsqueda
+                                                        listaItemsBusquedaExtra = mUtilServiciosFacetas.ObtenerListaItemsBusquedaExtra(new Dictionary<string, List<string>>(), mTipoBusqueda, mOrganizacionID, mProyectoID);
 
-                                                mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoCarga, faceta.ClaveFaceta, listaFiltros, listaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), faceta.TipoDisenio, 0, limite, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, faceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, omitirPalabrasNoRelevantesSearch, faceta.Reciproca, faceta.TipoPropiedad, FiltrosSearchPersonalizados, faceta.Inmutable, pEsMovil);
+                                                        mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoAux, faceta.ClaveFaceta, new Dictionary<string, List<string>>(), listaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), faceta.TipoDisenio, 0, limite, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, faceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, omitirPalabrasNoRelevantesSearch, faceta.Reciproca, faceta.TipoPropiedad, FiltrosSearchPersonalizados, faceta.Inmutable, pEsMovil, pListaExcluidos);
+                                                        facetadoTesSemDS = ObtenerValoresTesauroSemanticoParaFaceta(faceta, facetadoAux);
+                                                        facetadoCL.AgregarTesauroSemanticoDeBusquedaEnProyecto(facetadoTesSemDS, mGrafoID, faceta.ClaveFaceta);
+                                                        facetadoAux.Dispose();
+                                                    }
+                                                }
+                                                mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoCarga, faceta.ClaveFaceta, listaFiltros, listaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), faceta.TipoDisenio, 0, limite, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, faceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, omitirPalabrasNoRelevantesSearch, faceta.Reciproca, faceta.TipoPropiedad, FiltrosSearchPersonalizados, faceta.Inmutable, pEsMovil, pListaExcluidos);
                                                 string consultaReciproca, claveFaceta = string.Empty;
                                                 mFacetadoCL.FacetadoCN.FacetadoAD.ObtenerDatosFiltroReciproco(out consultaReciproca, faceta.ClaveFaceta, out claveFaceta);
                                                 listaTablas.Add(claveFaceta);
@@ -3665,7 +3693,7 @@ namespace ServicioCargaFacetas
 
                         foreach (FacetaObjetoConocimientoProyecto filaObjConProy in listaFacetaObjetoConocimientoProyectoBorrar)
                         {
-                            if (filaObjConProy.Reciproca == 0)
+                            //if (filaObjConProy.Reciproca == 0)
                             {
                                 GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyecto.Remove(filaObjConProy);
                             }
@@ -3714,7 +3742,7 @@ namespace ServicioCargaFacetas
 
                         foreach (FacetaObjetoConocimientoProyecto filaObjConProy in listaFacetaObjetoConocimientoProyectoBorrar)
                         {
-                            if (filaObjConProy.Reciproca == 0)
+                            //if (filaObjConProy.Reciproca == 0)
                             {
                                 GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyecto.Remove(filaObjConProy);
                             }
@@ -3877,10 +3905,11 @@ namespace ServicioCargaFacetas
 
                     foreach (FacetaObjetoConocimientoProyecto filaObjConProy in listaFacetaObjetoConocimientoProyectoBorrar)
                     {
-                        if (filaObjConProy.Reciproca == 0)
+                        //if(filaObjConProy.Reciproca == 0)
                         {
                             GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyecto.Remove(filaObjConProy);
                         }
+
                     }
 
                     List<FacetaFiltroHome> listaAuxiliarFacetaFiltroHome = listaFiltrada;
@@ -4125,7 +4154,7 @@ namespace ServicioCargaFacetas
             {
                 excluirPersonas = true;
             }
-            mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, false, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, TipoPropiedadFaceta.FechaMinMax, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
+            mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, false, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, TipoPropiedadFaceta.FechaMinMax, FiltrosSearchPersonalizados, pInmutable, pEsMovil, mListaExcluidos);
         }
 
         [NonAction]
@@ -4137,7 +4166,7 @@ namespace ServicioCargaFacetas
                 excluirPersonas = true;
             }
 
-            mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, false, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
+            mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, false, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil, mListaExcluidos);
 
             if (mFacetadoDS.Tables[pClaveFaceta].Rows.Count > 0)
             {
@@ -4170,7 +4199,7 @@ namespace ServicioCargaFacetas
             rangos.Add(pAnio + 3);
             rangos.Add(pAnio + 1);
 
-            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pNombreFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, pUsarHilos, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, false, pEsMovil);
+            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pNombreFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, pUsarHilos, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, false, pEsMovil, mListaExcluidos);
 
             mFacetadoDS.Merge(facetadoDSAux);
             rangos.Clear();
@@ -4178,7 +4207,7 @@ namespace ServicioCargaFacetas
             rangos.Add(pAnio + 6);
             rangos.Add(pAnio + 4);
 
-            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pNombreFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, pUsarHilos, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, false, pEsMovil);
+            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pNombreFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, pUsarHilos, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, false, pEsMovil, mListaExcluidos);
 
             mFacetadoDS.Merge(facetadoDSAux);
             rangos.Clear();
@@ -4186,7 +4215,7 @@ namespace ServicioCargaFacetas
             rangos.Add(pAnio + 9);
             rangos.Add(pAnio + 7);
 
-            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pNombreFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, pUsarHilos, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, false, pEsMovil);
+            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pNombreFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, pUsarHilos, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, false, pEsMovil, mListaExcluidos);
 
             mFacetadoDS.Merge(facetadoDSAux);
             rangos.Clear();
@@ -4194,7 +4223,7 @@ namespace ServicioCargaFacetas
             rangos.Add(pAnio + 12);
             rangos.Add(pAnio + 10);
 
-            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pNombreFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, pUsarHilos, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, false, pEsMovil);
+            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pNombreFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, pUsarHilos, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, false, pEsMovil, mListaExcluidos);
 
             mFacetadoDS.Merge(facetadoDSAux);
         }
@@ -4213,7 +4242,7 @@ namespace ServicioCargaFacetas
         {
             // Elimino el rango de años, porque sólo hay uno, y calculo el de los meses. 
             mFacetadoDS.Tables[pClaveFaceta].Clear();
-            mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, false, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, TipoPropiedadFaceta.FechaMeses, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
+            mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pFaceta.ElementosVisibles * 2, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, false, pExcluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, TipoPropiedadFaceta.FechaMeses, FiltrosSearchPersonalizados, pInmutable, pEsMovil, mListaExcluidos);
         }
 
         [NonAction]
@@ -4228,7 +4257,7 @@ namespace ServicioCargaFacetas
             bool usarHilos = false;
 
             FacetadoDS facetadoDSRangos = new FacetadoDS();
-            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSRangos, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
+            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSRangos, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, null, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil, mListaExcluidos);
 
             FacetadoDS facetadoDSAux = new FacetadoDS();
             List<int> rangos = new List<int>();
@@ -4245,7 +4274,7 @@ namespace ServicioCargaFacetas
 
                     rangos.Add((listaAniosOrdenados[i] + 1) * 10);
 
-                    mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
+                    mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil, mListaExcluidos);
 
                     if (facetadoDSAux.Tables[pClaveFaceta].Rows.Count > 0)
                     {
@@ -4259,7 +4288,7 @@ namespace ServicioCargaFacetas
 
                             rangos.Add((listaAniosOrdenados[i] + 1) * 10);
 
-                            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
+                            mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil, mListaExcluidos);
                         }
                     }
 
@@ -4278,7 +4307,7 @@ namespace ServicioCargaFacetas
                     rangos.Add(anio + 1);
                     rangos.Add(anio);
 
-                    mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
+                    mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoDSAux, pClaveFaceta, pListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, pNumElementosVisibles, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, pOmitirPalabrasNoRelevantesSearch, pFaceta.Reciproca, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil, mListaExcluidos);
 
                     //Versión 1875 --> Duplicaba valores del DS como el año 2009, 2009, 2010... etc
                     //Fallaba en la versión 1875, funciona en la 1880.
@@ -4366,7 +4395,7 @@ namespace ServicioCargaFacetas
                 mListaFiltros.Remove(pClaveFaceta);
             }
 
-            mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, mListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, 0, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, false, false, pPermitirRecursosPrivados, true, 0, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil);
+            mFacetadoCL.ObtenerFaceta(mGrafoID, mFacetadoDS, pClaveFaceta, mListaFiltros, mListaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), pFaceta.TipoDisenio, 0, 0, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, true, rangos, pFaceta.Excluyente, false, false, pPermitirRecursosPrivados, true, 0, pFaceta.TipoPropiedad, FiltrosSearchPersonalizados, pInmutable, pEsMovil, mListaExcluidos);
         }
 
         #region Rangos
@@ -4925,14 +4954,14 @@ namespace ServicioCargaFacetas
             string indiceAgrupado = $"{primero}-{ultimoTemp}";
             if (primero != ultimoTemp.ToString())
             {
-                if (!dicSubrangos.ContainsKey(indiceAgrupado))
+                if (!dicSubrangos.ContainsKey(indiceAgrupado) && suma > 0)
                 {
                     dicSubrangos.Add(indiceAgrupado, suma);
                 }
             }
             else
             {
-                if (!dicSubrangos.ContainsKey(primero))
+                if (!dicSubrangos.ContainsKey(primero) && suma > 0)
                 {
                     dicSubrangos.Add(primero, suma);
                 }
@@ -4952,14 +4981,14 @@ namespace ServicioCargaFacetas
                 string indiceAgrupado2 = primero + "-" + ultimo;
                 if (primero != ultimo.ToString())
                 {
-                    if (!dicSubrangos.ContainsKey(indiceAgrupado2))
+                    if (!dicSubrangos.ContainsKey(indiceAgrupado2) && suma > 0)
                     {
                         dicSubrangos.Add(indiceAgrupado2, suma);
                     }
                 }
                 else
                 {
-                    if (!dicSubrangos.ContainsKey(primero))
+                    if (!dicSubrangos.ContainsKey(primero) && suma > 0)
                     {
                         dicSubrangos.Add(primero, suma);
                     }
@@ -5583,7 +5612,7 @@ namespace ServicioCargaFacetas
                 }
 
                 nombreReal = fecha1 + fecha2;
-                
+
 
                 if (!pFiltro.Equals(valor))
                 {
@@ -6250,6 +6279,19 @@ namespace ServicioCargaFacetas
                     if (filasOntologia.Count > 0)
                     {
                         tipo = filasOntologia[0].NombreOnt;
+                    }
+
+                    if (mTipoBusqueda.Equals(TipoBusqueda.Contribuciones))
+                    {
+                        ProyectoCN proyectoCN = new ProyectoCN(mEntityContext, mLoggingService, mConfigService, mServicesUtilVirtuosoAndReplication);
+                        string nombreOntologia = proyectoCN.ObtenerNombreOntologiaProyectoUsuario(IdentidadActual.PerfilID, tipo);
+
+                        if (!string.IsNullOrEmpty(nombreOntologia))
+                        {
+                            tipo = UtilCadenas.ObtenerTextoDeIdioma(nombreOntologia, mLanguageCode, ParametrosGenerales.IdiomaDefecto);
+                        }
+
+                        proyectoCN.Dispose();
                     }
                     break;
             }
@@ -7679,8 +7721,8 @@ namespace ServicioCargaFacetas
                             }
                             if (!elementos.ContainsKey(tipo))
                             {
-                                int cantidad = 0;
-                                int.TryParse((string)myrow[1], out cantidad);
+                                //Se pone -1 para que no aparezca el número de resultados
+                                int cantidad = -1;
                                 elementos.Add(tipo, cantidad);
                                 parametrosElementos.Add(tipo, (string)myrow[0]);
                             }
@@ -8353,36 +8395,17 @@ namespace ServicioCargaFacetas
             {
                 if (!TesauroSemDSFaceta.ContainsKey(pFaceta.ClaveFaceta) || mFacetadoDSAuxPorFaceta.ContainsKey(pFaceta.ClaveFaceta))
                 {
-                    List<string> listaPropsTesSem = new List<string>();
-                    listaPropsTesSem.Add(arrayTesSem[2]);
-                    listaPropsTesSem.Add(arrayTesSem[3]);
-                    listaPropsTesSem.Add(arrayTesSem[4]);
-
-                    List<string> listaEntidadesBusqueda = new List<string>();
-
-                    if (mListaFiltros.ContainsKey(pFaceta.ClaveFaceta) && !mFacetadoDSAuxPorFaceta.ContainsKey(pFaceta.ClaveFaceta))
-                    {
-                        listaEntidadesBusqueda.AddRange(mListaFiltros[pFaceta.ClaveFaceta]);
-                    }
-
-                    listaEntidadesBusqueda.AddRange(elementos.Keys);
                     //Obtenerlo de cache siempre que se pueda, pero hacer la petición de todos los recursos.
                     FacetadoCL facetadoCL = new FacetadoCL(mUtilServicios.UrlIntragnoss, mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
                     facetadoTesSemDS = facetadoCL.ObtenerModeloTesauroSemanticoDeBusquedaEnProyecto(mGrafoID, pFaceta.ClaveFaceta, UtilIdiomas.LanguageCode);
 
                     if (facetadoTesSemDS == null)
                     {
-                        FacetadoCN facCN = new FacetadoCN(mUtilServicios.UrlIntragnoss, mGrafoID, mEntityContext, mLoggingService, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
-                        facetadoTesSemDS = facCN.ObtenerValoresPropiedadesEntidades(mGrafoID, listaEntidadesBusqueda, listaPropsTesSem, true);
-                        facCN.Dispose();
-
-                        if (!TesauroSemDSFaceta.ContainsKey(pFaceta.ClaveFaceta))
-                        {
-                            TesauroSemDSFaceta.Add(pFaceta.ClaveFaceta, facetadoTesSemDS);
-                        }
-
-                        facetadoCL.AgregarTesauroSemanticoDeBusquedaEnProyecto(facetadoTesSemDS, mGrafoID, pFaceta.ClaveFaceta, UtilIdiomas.LanguageCode);
-                        facetadoCL.Dispose();
+                        facetadoTesSemDS = ObtenerValoresTesauroSemanticoParaFaceta(pFaceta, pFacetaDatos);
+                    }
+                    if (!TesauroSemDSFaceta.ContainsKey(pFaceta.ClaveFaceta))
+                    {
+                        TesauroSemDSFaceta.Add(pFaceta.ClaveFaceta, facetadoTesSemDS);
                     }
                 }
                 else
@@ -8549,6 +8572,11 @@ namespace ServicioCargaFacetas
                                 }
                             }
                         }
+                    }
+                    else
+                    {
+                        //Si ha llegado hasta aqui no tiene el 4 campo con valor
+                        estaFacetado = false;
                     }
                 }
 
@@ -8718,6 +8746,59 @@ namespace ServicioCargaFacetas
             }
             return null;
         }
+        [NonAction]
+        private FacetadoDS ObtenerValoresTesauroSemanticoParaFaceta(Faceta pFaceta, FacetadoDS pFacetaDatos)
+        {
+            FacetadoDS facetadoTesSemDS = null;
+            string[] arrayTesSem = ObtenerDatosFacetaTesSem(pFaceta.ClaveFaceta);
+            Dictionary<string, int> elementos = new Dictionary<string, int>();
+            foreach (DataRow myrow in pFacetaDatos.Tables[pFaceta.ClaveFaceta].Rows)
+            {
+                if (!elementos.ContainsKey((string)myrow[0]))
+                {
+                    string nombre = (string)myrow[0];
+                    if (String.IsNullOrEmpty(nombre))
+                    {
+                        nombre = TextoSinEspecificar;
+                    }
+                    int cantidad = 0;
+                    int.TryParse((string)myrow[1], out cantidad);
+
+
+                    elementos.Add(nombre, cantidad);
+                }
+            }
+
+            if (elementos.Count > 0)
+            {
+                if (!TesauroSemDSFaceta.ContainsKey(pFaceta.ClaveFaceta) || mFacetadoDSAuxPorFaceta.ContainsKey(pFaceta.ClaveFaceta))
+                {
+                    List<string> listaPropsTesSem = new List<string>();
+                    listaPropsTesSem.Add(arrayTesSem[2]);
+                    listaPropsTesSem.Add(arrayTesSem[3]);
+                    listaPropsTesSem.Add(arrayTesSem[4]);
+
+                    List<string> listaEntidadesBusqueda = new List<string>();
+
+                    if (mListaFiltros.ContainsKey(pFaceta.ClaveFaceta) && !mFacetadoDSAuxPorFaceta.ContainsKey(pFaceta.ClaveFaceta))
+                    {
+                        listaEntidadesBusqueda.AddRange(mListaFiltros[pFaceta.ClaveFaceta]);
+                    }
+
+
+                    listaEntidadesBusqueda.AddRange(elementos.Keys);
+
+                    FacetadoCN facCN = new FacetadoCN(mUtilServicios.UrlIntragnoss, mEntityContext, mLoggingService, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
+                    facetadoTesSemDS = facCN.ObtenerValoresPropiedadesEntidades(mGrafoID, listaEntidadesBusqueda, listaPropsTesSem, true, false);
+                    //facetadoTesSemDS = facCN.ObtenerValoresPropiedadesEntidadesTodas(mGrafoID, listaPropsTesSem, true);
+                    facCN.Dispose();
+
+                    //facetadoCL.AgregarTesauroSemanticoDeBusquedaEnProyecto(facetadoTesSemDS, mGrafoID, pFaceta.ClaveFaceta);
+                }
+
+            }
+            return facetadoTesSemDS;
+        }
 
         [NonAction]
         public FacetModel AgregarFaceta(string pClaveFaceta, string pTitulo, Dictionary<string, int> pElementosFaceta, Dictionary<string, string> pParametrosElementos, int pLimite, Faceta pFaceta)
@@ -8729,7 +8810,7 @@ namespace ServicioCargaFacetas
         public FacetModel AgregarFaceta(string pClaveFaceta, string pTitulo, Dictionary<string, int> pElementosFaceta, Dictionary<string, string> pParametrosElementos, int pLimite, int pLimiteOriginal, Faceta pFaceta)
         {
             string idPanel = NormalizarNombreFaceta(pClaveFaceta);
-          
+
             if (pElementosFaceta != null && pElementosFaceta.Count > 0 && (pFaceta.AlgoritmoTransformacion.Equals(TiposAlgoritmoTransformacion.CalendarioConRangos) || pFaceta.AlgoritmoTransformacion.Equals(TiposAlgoritmoTransformacion.Calendario)))
             {
                 pLimite = pElementosFaceta.Count + 1;
@@ -9667,7 +9748,7 @@ namespace ServicioCargaFacetas
                             url = RemplazoInsensitivo(url, $"{pFiltro}&", "");
                         }
                         else if (culture.CompareInfo.IndexOf(url, $"&{pFiltro}", CompareOptions.IgnoreCase) >= 0 && url.Substring(culture.CompareInfo.IndexOf(url, $"&{pFiltro}", CompareOptions.IgnoreCase) + $"&{pFiltro}".Length).Length == 0)
-                        {   
+                        {
                             url = RemplazoInsensitivo(url, $"&{pFiltro}", "");
                         }
                         else if (culture.CompareInfo.IndexOf(url, $"?{pFiltro}", CompareOptions.IgnoreCase) >= 0 && url.Substring(culture.CompareInfo.IndexOf(url, $"?{pFiltro}", CompareOptions.IgnoreCase) + $"?{pFiltro}".Length).Length == 0)
@@ -9765,20 +9846,36 @@ namespace ServicioCargaFacetas
 
         #endregion
 
+
+
         #region Trazas
 
         private void IniciarTraza()
         {
-            GnossCacheCL gnossCacheCL = new GnossCacheCL(mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mServicesUtilVirtuosoAndReplication);
-            object trazaHabilitada = gnossCacheCL.ObtenerDeCache($"traza{mControladorBase.DominoAplicacion}");//72horas
+            if (DateTime.Now > HORA_COMPROBACION_TRAZA)
+            {
+                lock (BLOQUEO_COMPROBACION_TRAZA)
+                {
+                    if (DateTime.Now > HORA_COMPROBACION_TRAZA)
+                    {
+                        HORA_COMPROBACION_TRAZA = DateTime.Now.AddSeconds(15);
+                        TrazasCL trazasCL = new TrazasCL(mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mServicesUtilVirtuosoAndReplication);
+                        string tiempoTrazaResultados = trazasCL.ObtenerTrazaEnCache("facets");
 
-            if (trazaHabilitada != null && (bool)trazaHabilitada)
-            {
-                LoggingService.TrazaHabilitada = true;
-            }
-            else
-            {
-                LoggingService.TrazaHabilitada = false;
+                        if (!string.IsNullOrEmpty(tiempoTrazaResultados))
+                        {
+                            int valor = 0;
+                            int.TryParse(tiempoTrazaResultados, out valor);
+                            LoggingService.TrazaHabilitada = true;
+                            LoggingService.TiempoMinPeticion = valor; //Para sacar los segundos
+                        }
+                        else
+                        {
+                            LoggingService.TrazaHabilitada = false;
+                            LoggingService.TiempoMinPeticion = 0;
+                        }
+                    }
+                }
             }
         }
 
@@ -9900,7 +9997,7 @@ namespace ServicioCargaFacetas
 
             return dic;
         }
-        
+
         [NonAction]
         private AutocompleteBehaviours ObtenerBehaviourDeComportamiento(TipoMostrarSoloCaja pComportamiento)
         {
@@ -10048,6 +10145,29 @@ namespace ServicioCargaFacetas
                 inicio = 0;
                 fin = 0;
             }
+        }
+
+        [NonAction]
+        private List<Guid> ObtenerListaDeExcluidos(string pLista)
+        {
+            List<Guid> listaExcluidos = new List<Guid>();
+
+            if (!string.IsNullOrEmpty(pLista))
+            {
+                string[] listaIDs = pLista.Split(',');
+
+                foreach (string id in listaIDs)
+                {
+                    Guid idGuid;
+
+                    if (!string.IsNullOrEmpty(id) && Guid.TryParse(id, out idGuid))
+                    {
+                        listaExcluidos.Add(idGuid);
+                    }
+                }
+            }
+
+            return listaExcluidos;
         }
 
         /// <summary>

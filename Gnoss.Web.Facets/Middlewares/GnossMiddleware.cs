@@ -28,6 +28,7 @@ namespace ServicioCargaFacetasMVC.Middlewares
 
         public async Task Invoke(HttpContext context, LoggingService loggingService, EntityContext entityContext, RedisCacheWrapper redisCacheWrapper)
         {
+            entityContext.SetTrackingFalse();
             Application_BeginRequest(entityContext, context, loggingService, redisCacheWrapper);
             await _next(context);
             Application_EndRequest(loggingService);
