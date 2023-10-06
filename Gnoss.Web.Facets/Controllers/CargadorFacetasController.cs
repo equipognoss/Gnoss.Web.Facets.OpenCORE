@@ -2140,6 +2140,7 @@ namespace ServicioCargaFacetas
         {
             CommunityModel comunidad = new CommunityModel();
             comunidad.ListaPersonalizaciones = new List<string>();
+            comunidad.ListaPersonalizacionesDominio = new List<string>();
             comunidad.ListaPersonalizacionesEcosistema = new List<string>();
 
             ViewBag.Comunidad = comunidad;
@@ -2434,7 +2435,7 @@ namespace ServicioCargaFacetas
                 }
             }
 
-            if (!recursosCargados && pListaFiltros.ContainsKey("rdf:type") && pListaFiltros["rdf:type"].Count == 1)
+            if (!recursosCargados && pListaFiltros.ContainsKey("rdf:type") && pListaFiltros["rdf:type"].Count == 1 && (!pListaFiltros["rdf:type"].First().Equals("Recurso") || listaItems.Count <= 1))
             {
                 if (!mFacetadoDS.Tables.Contains("rdf:type"))
                 {
@@ -2885,11 +2886,11 @@ namespace ServicioCargaFacetas
                                                     {
                                                         FacetadoDS facetadoAux = new FacetadoDS();
                                                         //Se obtiene la lista de items de búsqueda extra porque necesitamos obtener todos los tesauros de virtuoso para cachearlo. Luego filtramos por el necesario en esta búsqueda
-                                                        listaItemsBusquedaExtra = mUtilServiciosFacetas.ObtenerListaItemsBusquedaExtra(new Dictionary<string, List<string>>(), mTipoBusqueda, mOrganizacionID, mProyectoID);
+                                                        List<string> listaItemsBusquedaExtraTesauroCompleto = mUtilServiciosFacetas.ObtenerListaItemsBusquedaExtra(new Dictionary<string, List<string>>(), mTipoBusqueda, mOrganizacionID, mProyectoID);                                                        
 
-                                                        mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoAux, faceta.ClaveFaceta, new Dictionary<string, List<string>>(), listaItemsBusquedaExtra, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), faceta.TipoDisenio, 0, limite, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, faceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, omitirPalabrasNoRelevantesSearch, faceta.Reciproca, faceta.TipoPropiedad, FiltrosSearchPersonalizados, faceta.Inmutable, pEsMovil, pListaExcluidos);
+                                                        mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoAux, faceta.ClaveFaceta, new Dictionary<string, List<string>>(), listaItemsBusquedaExtraTesauroCompleto, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), faceta.TipoDisenio, 0, limite, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, faceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, omitirPalabrasNoRelevantesSearch, faceta.Reciproca, faceta.TipoPropiedad, FiltrosSearchPersonalizados, faceta.Inmutable, pEsMovil, pListaExcluidos);
                                                         facetadoTesSemDS = ObtenerValoresTesauroSemanticoParaFaceta(faceta, facetadoAux);
-                                                        facetadoCL.AgregarTesauroSemanticoDeBusquedaEnProyecto(facetadoTesSemDS, mGrafoID, faceta.ClaveFaceta);
+                                                        facetadoCL.AgregarTesauroSemanticoDeBusquedaEnProyecto(facetadoTesSemDS, mGrafoID, faceta.ClaveFaceta, UtilIdiomas.LanguageCode);
                                                         facetadoAux.Dispose();
                                                     }
                                                 }
@@ -7721,8 +7722,14 @@ namespace ServicioCargaFacetas
                             }
                             if (!elementos.ContainsKey(tipo))
                             {
-                                //Se pone -1 para que no aparezca el número de resultados
-                                int cantidad = -1;
+                                int cantidad = 0;
+                                int.TryParse((string)myrow[1], out cantidad);
+
+                                if (mFacetadoDS.Tables["rdf:type"].Rows.Count == 1 && cantidad <= 1)
+                                {
+                                    //Se pone -1 para que no aparezca el número de resultados
+                                    cantidad = -1;
+                                }
                                 elementos.Add(tipo, cantidad);
                                 parametrosElementos.Add(tipo, (string)myrow[0]);
                             }
