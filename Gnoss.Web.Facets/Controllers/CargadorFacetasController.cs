@@ -55,6 +55,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
@@ -148,11 +149,6 @@ namespace ServicioCargaFacetas
         /// Indica si no debe haber privacidad.
         /// </summary>
         private bool mSinPrivacidad;
-
-        /// <summary>
-        /// Indica si no deben cargarse las propiedades semanticas.
-        /// </summary>
-        private bool mSinDatosExtra;
 
         /// <summary>
         /// Identificador de la pestanya actual
@@ -337,19 +333,12 @@ namespace ServicioCargaFacetas
 
         #endregion
 
-        private EntityContext mEntityContext;
-        private LoggingService mLoggingService;
-        private RedisCacheWrapper mRedisCacheWrapper;
-        private ConfigService mConfigService;
-        private VirtuosoAD mVirtuosoAD;
-        private GnossCache mGnossCache;
         private UtilServicios mUtilServicios;
-        private IHttpContextAccessor mHttpContextAccessor;
+        
         private ICompositeViewEngine mViewEngine;
         private ControladorBase mControladorBase;
         private UtilServiciosFacetas mUtilServiciosFacetas;
-        private IHostingEnvironment mEnv;
-        private IServicesUtilVirtuosoAndReplication mServicesUtilVirtuosoAndReplication;
+        private IHostingEnvironment mEnv;        
         private static object BLOQUEO_COMPROBACION_TRAZA = new object();
         private static DateTime HORA_COMPROBACION_TRAZA;
 
@@ -621,7 +610,7 @@ namespace ServicioCargaFacetas
                 ViewBag.BaseUrlStatic = BaseURLStatic;
                 ViewData.Model = facModel;
 
-                string parametros = "";
+                StringBuilder parametrosStringBuilder= new StringBuilder();
 
                 if (mListaFiltros.Count > 0)
                 {
@@ -629,10 +618,12 @@ namespace ServicioCargaFacetas
                     {
                         foreach (string valor in mListaFiltros[clave])
                         {
-                            parametros += $"|{clave}={valor}";
+                            parametrosStringBuilder.Append($"|{clave}={valor}");
                         }
                     }
                 }
+
+                string parametros = parametrosStringBuilder.ToString();
 
                 if (!string.IsNullOrEmpty(parametros))
                 {
@@ -667,7 +658,7 @@ namespace ServicioCargaFacetas
                             respuesta = Convert.ToBase64String(output.ToArray());
                         }
                     }
-                    if (mHttpContextAccessor.HttpContext.Request.Headers["User-Agent"].Contains("GnossInternalRequest"))
+                    if (mHttpContextAccessor.HttpContext.Request.Headers["User-Agent"].ToString().Contains("GnossInternalRequest"))
                     {
                         respuesta = SerializeViewData(respuesta);
                     }
@@ -932,16 +923,16 @@ namespace ServicioCargaFacetas
             {
                 try
                 {
-                    pParametros_adiccionales += $"|skos:ConceptID=gnoss:{GestorTesauro.TesauroDW.ListaTesauroUsuario.FirstOrDefault().CategoriaTesauroPublicoID.ToString().ToUpper()}|gnoss:hasEstadoPP=Publicado";
+                    pParametros_adiccionales += $"|skos:ConceptID=gnoss:{GestorTesauro.TesauroDW.ListaTesauroUsuario[0].CategoriaTesauroPublicoID.ToString().ToUpper()}|gnoss:hasEstadoPP=Publicado";
                 }
                 catch (Exception)
                 {
-                    pParametros_adiccionales += $"|skos:ConceptID=gnoss:{GestorTesauro.TesauroDW.ListaTesauroOrganizacion.FirstOrDefault().CategoriaTesauroPublicoID.ToString().ToUpper()}|gnoss:hasEstadoPP=Publicado";
+                    pParametros_adiccionales += $"|skos:ConceptID=gnoss:{GestorTesauro.TesauroDW.ListaTesauroOrganizacion[0].CategoriaTesauroPublicoID.ToString().ToUpper()}|gnoss:hasEstadoPP=Publicado";
                 }
             }
 
-
             #region Parametros Extra petición faceta
+
             if (pParametros_adiccionales.Contains("NumElementosFaceta="))
             {
                 string trozo1 = pParametros_adiccionales.Substring(0, pParametros_adiccionales.IndexOf("NumElementosFaceta="));
@@ -952,6 +943,7 @@ namespace ServicioCargaFacetas
                 mNumElementosFaceta = int.Parse(NumElementosFaceta);
                 pParametros_adiccionales = trozo1 + trozo2;
             }
+
             #endregion
 
             #region Sin caché
@@ -978,7 +970,6 @@ namespace ServicioCargaFacetas
 
             if (pParametros_adiccionales.Contains("sinDatosExtra=true"))
             {
-                mSinDatosExtra = true;
                 pParametros_adiccionales = pParametros_adiccionales.Replace("sinDatosExtra=true", "");
             }
 
@@ -1239,12 +1230,14 @@ namespace ServicioCargaFacetas
             }
 
             #region FiltroIdiomaActual
+
             if (ParametroProyecto.ContainsKey(ParametroAD.PropiedadContenidoMultiIdioma))
             {
                 List<string> listaIdiomas = new List<string>();
                 listaIdiomas.Add(pLanguageCode);
                 mListaFiltros.Add(ParametroProyecto[ParametroAD.PropiedadContenidoMultiIdioma], listaIdiomas);
             }
+
             #endregion
 
             if (GruposPorTipo)
@@ -1295,7 +1288,6 @@ namespace ServicioCargaFacetas
                             string filtro = filtrosCondicionados[0];
                             string[] filtroTroceado = filtro.Split(separadores, StringSplitOptions.RemoveEmptyEntries);
                             string key = filtroTroceado[0];
-                            string valor = filtroTroceado[1];
 
                             if (!filtros.Contains(key))
                             {
@@ -1318,7 +1310,7 @@ namespace ServicioCargaFacetas
                                 {
                                     pParametros_adiccionales += "|";
                                 }
-                                pParametros_adiccionales += key + "=" + valor;
+                                pParametros_adiccionales += $"{key}={valor}";
                             }
                         }
                     }
@@ -2425,7 +2417,7 @@ namespace ServicioCargaFacetas
                         facetadoDSComprobacion.Tables["rdf:type"].Columns.Add("a");
                         foreach (string tipo in filtrosPagina["rdf:type"])
                         {
-                            facetadoDSComprobacion.Tables["rdf:type"].Rows.Add(tipo, "1");
+                            facetadoDSComprobacion.Tables["rdf:type"].Rows.Add(tipo, "0");
                         }
                     }
                     else
@@ -2435,7 +2427,12 @@ namespace ServicioCargaFacetas
                 }
             }
 
-            if (!recursosCargados && pListaFiltros.ContainsKey("rdf:type") && pListaFiltros["rdf:type"].Count == 1 && (!pListaFiltros["rdf:type"].First().Equals("Recurso") || listaItems.Count <= 1))
+            FacetaCN facetaCN = new FacetaCN(mEntityContext, mLoggingService, mConfigService, mServicesUtilVirtuosoAndReplication);
+            
+            List<FacetaObjetoConocimientoProyecto> listaFacetasRdfType = facetaCN.ObtenerFacetaObjetoConocimientoPorFaceta("rdf:type", mProyectoID);
+            bool facetaOculta = listaFacetasRdfType.Exists(item => (item.Oculta.HasValue && item.Oculta.Value) || item.OcultaEnFacetas);
+
+            if (!recursosCargados && facetaOculta)
             {
                 if (!mFacetadoDS.Tables.Contains("rdf:type"))
                 {
@@ -2445,10 +2442,13 @@ namespace ServicioCargaFacetas
                     mFacetadoDS.Tables["rdf:type"].Columns.Add("a", typeof(string));
                 }
 
-                DataRow fila = mFacetadoDS.Tables["rdf:type"].NewRow();
-                fila["rdftype2000"] = pListaFiltros["rdf:type"][0];
-                fila["a"] = "1";
-                mFacetadoDS.Tables["rdf:type"].Rows.Add(fila);
+				foreach (string tipo in pListaFiltros["rdf:type"])
+				{
+					DataRow fila = mFacetadoDS.Tables["rdf:type"].NewRow();
+					fila["rdftype2000"] = tipo;
+					fila["a"] = "0";
+					mFacetadoDS.Tables["rdf:type"].Rows.Add(fila);
+				}
             }
             else if (!recursosCargados)
             {
@@ -2467,7 +2467,7 @@ namespace ServicioCargaFacetas
                         facetadoDSComprobacion.Tables["rdf:type"].Columns.Add("a");
                         foreach (string tipo in filtrosPagina["rdf:type"])
                         {
-                            facetadoDSComprobacion.Tables["rdf:type"].Rows.Add(tipo, "1");
+                            facetadoDSComprobacion.Tables["rdf:type"].Rows.Add(tipo, "0");
                         }
                     }
                     else
@@ -2881,16 +2881,16 @@ namespace ServicioCargaFacetas
                                                 if (faceta.AlgoritmoTransformacion.Equals(TiposAlgoritmoTransformacion.TesauroSemantico))
                                                 {
                                                     FacetadoCL facetadoCL = new FacetadoCL(mUtilServicios.UrlIntragnoss, mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
-                                                    FacetadoDS facetadoTesSemDS = facetadoCL.ObtenerModeloTesauroSemanticoDeBusquedaEnProyecto(mGrafoID, faceta.ClaveFaceta, UtilIdiomas.LanguageCode);
+                                                    FacetadoDS facetadoTesSemDS = facetadoCL.ObtenerModeloTesauroSemanticoDeBusquedaEnProyecto(mGrafoID, $"{faceta.ClaveFaceta}_reciprocidad_{faceta.Reciproca}", UtilIdiomas.LanguageCode);
                                                     if (facetadoTesSemDS == null)
                                                     {
                                                         FacetadoDS facetadoAux = new FacetadoDS();
                                                         //Se obtiene la lista de items de búsqueda extra porque necesitamos obtener todos los tesauros de virtuoso para cachearlo. Luego filtramos por el necesario en esta búsqueda
-                                                        List<string> listaItemsBusquedaExtraTesauroCompleto = mUtilServiciosFacetas.ObtenerListaItemsBusquedaExtra(new Dictionary<string, List<string>>(), mTipoBusqueda, mOrganizacionID, mProyectoID);                                                        
+                                                        List<string> listaItemsBusquedaExtraTesauroCompleto = mUtilServiciosFacetas.ObtenerListaItemsBusquedaExtra(new Dictionary<string, List<string>>(), TipoBusqueda.Recursos, mOrganizacionID, mProyectoID);                                                        
 
-                                                        mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoAux, faceta.ClaveFaceta, new Dictionary<string, List<string>>(), listaItemsBusquedaExtraTesauroCompleto, mEsMyGnoss, mEstaEnProyecto, mEsUsuarioInvitado, mIdentidadID.ToString(), faceta.TipoDisenio, 0, limite, mFormulariosSemanticos, mFiltroContextoWhere, (TipoProyecto)FilaProyecto.TipoProyecto, false, null, faceta.Excluyente, usarHilos, excluirPersonas, pPermitirRecursosPrivados, omitirPalabrasNoRelevantesSearch, faceta.Reciproca, faceta.TipoPropiedad, FiltrosSearchPersonalizados, faceta.Inmutable, pEsMovil, pListaExcluidos);
+                                                        mFacetadoCL.ObtenerFaceta(mGrafoID, facetadoAux, faceta.ClaveFaceta, new Dictionary<string, List<string>>(), listaItemsBusquedaExtraTesauroCompleto, mEsMyGnoss, false, true, UsuarioAD.Invitado.ToString(), faceta.TipoDisenio, 0, limite, mFormulariosSemanticos, "", (TipoProyecto)FilaProyecto.TipoProyecto, false, null, faceta.Excluyente, usarHilos, excluirPersonas, false, omitirPalabrasNoRelevantesSearch, faceta.Reciproca, faceta.TipoPropiedad, FiltrosSearchPersonalizados, faceta.Inmutable, pEsMovil, pListaExcluidos);
                                                         facetadoTesSemDS = ObtenerValoresTesauroSemanticoParaFaceta(faceta, facetadoAux);
-                                                        facetadoCL.AgregarTesauroSemanticoDeBusquedaEnProyecto(facetadoTesSemDS, mGrafoID, faceta.ClaveFaceta, UtilIdiomas.LanguageCode);
+                                                        facetadoCL.AgregarTesauroSemanticoDeBusquedaEnProyecto(facetadoTesSemDS, mGrafoID, $"{faceta.ClaveFaceta}_reciprocidad_{faceta.Reciproca}", UtilIdiomas.LanguageCode);
                                                         facetadoAux.Dispose();
                                                     }
                                                 }
@@ -5462,8 +5462,8 @@ namespace ServicioCargaFacetas
 
             if (pTipoPropiedad.Equals(TipoPropiedadFaceta.Fecha))
             {
-                string fecha1 = "";
-                string fecha2 = "";
+                string fecha1 = string.Empty;
+                string fecha2 = string.Empty;
                 string valor = pFiltro;
 
                 int indiceFecha2 = 1;
@@ -5545,6 +5545,9 @@ namespace ServicioCargaFacetas
                         string mes2 = fecha2.Substring(4, 2);
                         string anio2 = fecha2.Substring(0, 4);
 
+                        bool diferenciaUnAnio = (int.Parse(anio2) - int.Parse(anio)) == 1;
+
+
                         if (dia.Equals("00"))
                         {
                             if (!mes.Equals("00"))
@@ -5552,13 +5555,13 @@ namespace ServicioCargaFacetas
                                 int numeroMes = 0;
                                 int.TryParse(mes, out numeroMes);
                                 fecha1 = ObtenerTextoRangoFecha(false, numeroMes);
-                                fecha2 = " " + GetText("COMBUSQUEDAAVANZADA", "DEL") + " " + anio;
+                                fecha2 = $" {GetText("COMBUSQUEDAAVANZADA", "DEL")} {anio}";
                                 esAnio = true;
                             }
                             else
                             {
                                 fecha2 = anio;
-                                fecha1 = "";
+                                fecha1 = string.Empty;
                                 esAnio = true;
                             }
 
@@ -5572,16 +5575,16 @@ namespace ServicioCargaFacetas
                                     fecha1 += $"-{mesSuperiorRango}";
                                 }
                             }
-                            else if (dia.Equals("00"))
+                            else if (dia.Equals("00") && !diferenciaUnAnio)
                             {
                                 //Solo tenemos el año
-                                fecha1 = anio;
-                                fecha2 = "-" + anio2;
+                                fecha1 = $"Enero de {anio}";
+                                fecha2 = $" - Diciembre de {anio2}";
                             }
                         }
                         else
                         {
-                            fecha1 = dia + "/" + mes + "/" + anio + "-";
+                            fecha1 = $"{dia}/{mes}/{anio}-";
                         }
                     }
 
@@ -5591,7 +5594,7 @@ namespace ServicioCargaFacetas
                         string diaFecha2 = fecha2.Substring(6, 2);
                         if (diaFecha2.Equals("00"))
                         {
-                            diaFecha2 = "";
+                            diaFecha2 = string.Empty;
                         }
                         else
                         {
@@ -5601,7 +5604,7 @@ namespace ServicioCargaFacetas
                         string mesFecha2 = fecha2.Substring(4, 2);
                         if (mesFecha2.Equals("00"))
                         {
-                            mesFecha2 = "";
+                            mesFecha2 = string.Empty;
                         }
                         else
                         {
@@ -5676,7 +5679,7 @@ namespace ServicioCargaFacetas
                         }
                         else
                         {
-                            nombreReal = NivelesCertificacionDW.ListaNivelCertificacion.FirstOrDefault(nivel => nivel.Orden.ToString().Equals(pFiltro)).Descripcion;
+                            nombreReal = UtilCadenas.ObtenerTextoDeIdioma(NivelesCertificacionDW.ListaNivelCertificacion.FirstOrDefault(nivel => nivel.Orden.ToString().Equals(pFiltro)).Descripcion, mLanguageCode, ParametrosGenerales.IdiomaDefecto);
                         }
                         break;
                     case "gnoss:userstatus":
@@ -7725,7 +7728,7 @@ namespace ServicioCargaFacetas
                                 int cantidad = 0;
                                 int.TryParse((string)myrow[1], out cantidad);
 
-                                if (mFacetadoDS.Tables["rdf:type"].Rows.Count == 1 && cantidad <= 1)
+                                if (mFacetadoDS.Tables["rdf:type"].Rows.Count == 1 && cantidad <= 0)
                                 {
                                     //Se pone -1 para que no aparezca el número de resultados
                                     cantidad = -1;
@@ -8404,7 +8407,7 @@ namespace ServicioCargaFacetas
                 {
                     //Obtenerlo de cache siempre que se pueda, pero hacer la petición de todos los recursos.
                     FacetadoCL facetadoCL = new FacetadoCL(mUtilServicios.UrlIntragnoss, mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mVirtuosoAD, mServicesUtilVirtuosoAndReplication);
-                    facetadoTesSemDS = facetadoCL.ObtenerModeloTesauroSemanticoDeBusquedaEnProyecto(mGrafoID, pFaceta.ClaveFaceta, UtilIdiomas.LanguageCode);
+                    facetadoTesSemDS = facetadoCL.ObtenerModeloTesauroSemanticoDeBusquedaEnProyecto(mGrafoID, $"{pFaceta.ClaveFaceta}_reciprocidad_{pFaceta.Reciproca}", UtilIdiomas.LanguageCode);
 
                     if (facetadoTesSemDS == null)
                     {
@@ -8825,10 +8828,15 @@ namespace ServicioCargaFacetas
 
             int limite = pLimite;
 
-            if (pElementosFaceta.Keys.Count <= (pLimite * 2 - 1))
+            bool limiteEstrictoNumElementos = ParametrosAplicacionDS.Any(item => item.Parametro.Equals(TiposParametrosAplicacion.NumElementosVisiblesEstrictoFacetas) && (item.Valor.ToLower().Equals("true") || item.Valor.Equals("1")));
+			if (!limiteEstrictoNumElementos)
             {
-                limite = pLimite * 2;
-            }
+				if (pElementosFaceta.Keys.Count <= (pLimite * 2 - 1))
+				{
+					limite = pLimite * 2;
+				}
+			}
+            
             int numElem = 0;
 
 
@@ -9902,7 +9910,8 @@ namespace ServicioCargaFacetas
                     Directory.CreateDirectory(ruta);
                 }
             }
-            ruta += $"\\traza_{DateTime.Now.ToString("yyyy-MM-dd")}.txt";
+
+            ruta = Path.Combine(ruta, $"traza_{DateTime.Now.ToString("yyyy-MM-dd")}.txt");
 
             return ruta;
         }
@@ -10447,11 +10456,11 @@ namespace ServicioCargaFacetas
                 {
                     if (ProyectoSeleccionado != null)
                     {
-                        mUtilIdiomas = new UtilIdiomas(mLanguageCode, ProyectoSeleccionado.Clave, ProyectoSeleccionado.PersonalizacionID, PersonalizacionEcosistemaID, mLoggingService, mEntityContext, mConfigService);
+                        mUtilIdiomas = new UtilIdiomas(mLanguageCode, ProyectoSeleccionado.Clave, ProyectoSeleccionado.PersonalizacionID, PersonalizacionEcosistemaID, mLoggingService, mEntityContext, mConfigService,mRedisCacheWrapper);
                     }
                     else
                     {
-                        mUtilIdiomas = new UtilIdiomas(mLanguageCode, mLoggingService, mEntityContext, mConfigService);
+                        mUtilIdiomas = new UtilIdiomas(mLanguageCode, mLoggingService, mEntityContext, mConfigService,mRedisCacheWrapper);
                     }
                 }
                 return mUtilIdiomas;

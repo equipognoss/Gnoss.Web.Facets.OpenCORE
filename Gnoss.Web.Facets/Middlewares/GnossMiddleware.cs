@@ -84,7 +84,7 @@ namespace ServicioCargaFacetasMVC.Middlewares
                 Directory.CreateDirectory(ruta);
             }
 
-            ruta += Path.DirectorySeparatorChar + "traza_" + DateTime.Now.ToString("yyyy-MM-dd") + ".txt";
+            ruta = Path.Combine(ruta, $"traza_{DateTime.Now.ToString("yyyy-MM-dd")}.txt");
 
             return ruta;
         }
