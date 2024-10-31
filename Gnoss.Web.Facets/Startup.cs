@@ -45,19 +45,32 @@ namespace Gnoss.Web.Facetas
 
         public IConfiguration Configuration { get; }
         public Microsoft.AspNetCore.Hosting.IHostingEnvironment mEnvironment { get; }
-        private string IdiomaPrincipalDominio = "es";
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            bool cargado = false;
+			ILoggerFactory loggerFactory =
+			LoggerFactory.Create(builder =>
+			{
+				builder.AddConfiguration(Configuration.GetSection("Logging"));
+				builder.AddSimpleConsole(options =>
+				{
+					options.IncludeScopes = true;
+					options.SingleLine = true;
+					options.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
+					options.UseUtcTimestamp = true;
+				});
+			});
+
+			services.AddSingleton(loggerFactory);
+			bool cargado = false;
 
             services.AddCors(options =>
             {
                 options.AddPolicy(name: "_myAllowSpecificOrigins",
                                   builder =>
                                   {
-                                      builder.SetIsOriginAllowed(ComprobarDominioEnBD);
+                                      builder.SetIsOriginAllowed(UtilServicios.ComprobarDominioPermitidoCORS);
                                       builder.AllowAnyHeader();
                                       builder.AllowAnyMethod();
                                       builder.AllowCredentials();
@@ -91,14 +104,19 @@ namespace Gnoss.Web.Facetas
             {
                 bdType = Configuration.GetConnectionString("connectionType");
             }
-            if (bdType.Equals("2"))
+            if (bdType.Equals("2") || bdType.Equals("1"))
             {
                 services.AddScoped(typeof(DbContextOptions<EntityContext>));
                 services.AddScoped(typeof(DbContextOptions<EntityContextBASE>));
             }
             services.AddSingleton(typeof(ConfigService));
-            services.AddSingleton<ILoggerFactory, LoggerFactory>();
-            services.AddMvc();
+			services.AddSession(options => {
+				options.IdleTimeout = TimeSpan.FromMinutes(60); // Tiempo de expiración   
+																//options.Cookie.Name = "AppTest";
+																//options.Cookie.HttpOnly = true; // correct initialization
+
+			});
+			services.AddMvc();
 
             string acid = "";
             if (environmentVariables.Contains("acid"))
@@ -128,7 +146,16 @@ namespace Gnoss.Web.Facetas
 
                         );
             }
-            else if (bdType.Equals("2"))
+			else if (bdType.Equals("1"))
+			{
+				services.AddDbContext<EntityContext, EntityContextOracle>(options =>
+				options.UseOracle(acid)
+				);
+				services.AddDbContext<EntityContextBASE, EntityContextBASEOracle>(options =>
+				options.UseOracle(baseConnection)
+				);
+			}
+			else if (bdType.Equals("2"))
             {
                 services.AddDbContext<EntityContext, EntityContextPostgres>(opt =>
                 {
@@ -171,8 +198,9 @@ namespace Gnoss.Web.Facetas
             // Resolve the services from the service provider
             var configService = sp.GetService<ConfigService>();
             configService.ObtenerProcesarStringGrafo();
-
-            string configLogStash = configService.ObtenerLogStashConnection();
+			var redisCacheWrapper = sp.GetService<RedisCacheWrapper>();
+			var servicesUtilVirtuosoAndReplication = sp.GetService<IServicesUtilVirtuosoAndReplication>();
+			string configLogStash = configService.ObtenerLogStashConnection();
             if (!string.IsNullOrEmpty(configLogStash))
             {
                 LoggingService.InicializarLogstash(configLogStash);
@@ -188,15 +216,19 @@ namespace Gnoss.Web.Facetas
 
             EstablecerDominioCache(entity);
 
-            CargarIdiomasPlataforma(configService);
+			UtilServicios.CargarIdiomasPlataforma(entity, loggingService, configService, servicesUtilVirtuosoAndReplication, redisCacheWrapper);
 
-            GnossUrlsSemanticas.IdiomaPrincipalDominio = IdiomaPrincipalDominio;
+			GnossUrlsSemanticas.IdiomaPrincipalDominio = UtilServicios.IDIOMA_PRINCIPAL_DOMINIO;
 
-            CargarTextosPersonalizadosDominio(entity, loggingService, configService);
+			CargarTextosPersonalizadosDominio(entity, loggingService, configService, redisCacheWrapper);
 
-            ConfigurarApplicationInsights(configService);
+			ConfigurarApplicationInsights(configService);
 
-            FacetadoAD.EsPeticionFacetas = true;
+			UtilServicios.CargarDominiosPermitidosCORS(entity);
+
+			EstablecerPropiedadesFacetadoAD(entity);
+
+			FacetadoAD.EsPeticionFacetas = true;
 
             services.AddSwaggerGen(c =>
             {
@@ -204,13 +236,25 @@ namespace Gnoss.Web.Facetas
             });
         }
 
-        private bool ComprobarDominioEnBD(string dominio)
-        {
-            return true;
-        }
+		private void EstablecerPropiedadesFacetadoAD(EntityContext entity)
+		{
+			FacetadoAD.EsPeticionFacetas = true;
+			var priv = entity.ParametroAplicacion.FirstOrDefault(parametroApp => parametroApp.Parametro.Equals(TiposParametrosAplicacion.UsarPrivacidadEnFacetasYResultados));
 
-        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
+			if (priv != null && priv.Valor.Equals("false"))
+			{
+				FacetadoAD.UsarPrivacidadEnFacetasYResultados = false;
+			}
+
+			var usarRegex = entity.ParametroAplicacion.FirstOrDefault(parametroApp => parametroApp.Parametro.Equals(TiposParametrosAplicacion.UsarRegexParaBusquedaPorTextoLibre));
+			if (usarRegex != null && usarRegex.Valor.Equals("true"))
+			{
+				FacetadoAD.UsarRegexParaBusquedaPorTextoLibre = true;
+			}
+		}
+
+		// This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
+		public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             if (env.IsDevelopment())
             {
@@ -244,13 +288,8 @@ namespace Gnoss.Web.Facetas
 
             BaseCL.DominioEstatico = dominio;
         }
-        private void CargarIdiomasPlataforma(ConfigService configService)
-        {
 
-            IdiomaPrincipalDominio = configService.ObtenerListaIdiomas().FirstOrDefault();
-        }
-
-        private void CargarTextosPersonalizadosDominio(EntityContext context, LoggingService loggingService, ConfigService configService)
+        private void CargarTextosPersonalizadosDominio(EntityContext context, LoggingService loggingService, ConfigService configService, RedisCacheWrapper redisCacheWrapper)
         {
             string dominio = "";//mEnvironment.ApplicationName;
             Guid personalizacionEcosistemaID = Guid.Empty;
@@ -259,7 +298,7 @@ namespace Gnoss.Web.Facetas
             {
                 personalizacionEcosistemaID = new Guid(parametrosAplicacionPers[0].Valor.ToString());
             }
-            UtilIdiomas utilIdiomas = new UtilIdiomas("", loggingService, context, configService);
+            UtilIdiomas utilIdiomas = new UtilIdiomas("", loggingService, context, configService, redisCacheWrapper);
             utilIdiomas.CargarTextosPersonalizadosDominio(dominio, personalizacionEcosistemaID);
         }
 
