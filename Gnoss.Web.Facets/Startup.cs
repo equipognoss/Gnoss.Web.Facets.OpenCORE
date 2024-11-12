@@ -265,7 +265,8 @@ namespace Gnoss.Web.Facetas
             app.UseRouting();
             app.UseCors();
             app.UseAuthorization();
-            app.UseGnossMiddleware();
+			app.UseSession();
+			app.UseGnossMiddleware();
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllers();
