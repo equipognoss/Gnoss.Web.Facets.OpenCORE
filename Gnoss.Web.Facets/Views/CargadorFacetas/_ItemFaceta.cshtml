@@ -48,8 +48,12 @@ string bandejaActiva = "";
         @* Controlar si hay más facetas hijas para desplegar o no*@
         @if (Model.FacetItemlist != null && Model.FacetItemlist.Count > 0)
         {
-            @* Nombre de la clase para poder desplegar subFacetas*@
-            clase += " con-subfaceta ocultarSubFaceta";
+            @* Nombre de la clase para poder desplegar subFacetas *@
+            clase += " con-subfaceta";
+            if (!Model.FacetItemlist.Any(item => item.Selected))
+            {
+                clase += " ocultarSubFaceta";
+            }
         }
 
         <a rel="nofollow" href="@Model.Filter" class="@clase" name="@Model.Name" title="@Model.Tittle">

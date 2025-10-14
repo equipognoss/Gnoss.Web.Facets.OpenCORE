@@ -43,9 +43,11 @@ bool esTesauroSemantico = Model.ThesaurusID.Equals(new Guid("11111111-1111-1111-
             tesauroID = "--" + Model.Filter;
         }
 
+        string idFaceta = Model.Key + tesauroID;
+
         @* Contenedor de la faceta en sí*@
         <div id="@contenidoID">
-            <div class="box" id="@(Model.Key + tesauroID)">
+            <div class="box" id="@idFaceta">
                 @* Título de faceta + Icono de búsqueda *@
                 <div class="faceta-name">
                     <span class="faceta-title">
@@ -86,7 +88,7 @@ bool esTesauroSemantico = Model.ThesaurusID.Equals(new Guid("11111111-1111-1111-
                     <a class="no-close open-popup-link verMasFacetas verMasFacetasModalLista"
                        data-toggle="modal"
                        data-target="#modal-resultados-lista"
-                       data-facetkey="@Model.FacetKey"
+                       data-facetkey="@idFaceta"
                        data-facetissemantic="@esTesauroSemantico"
                        data-facetalphabeticalorder="True"
                        data-facetname="@Model.Name">@Html.GetText("COMBUSQUEDAAVANZADA", "VERMAS")

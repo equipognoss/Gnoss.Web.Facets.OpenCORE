@@ -1,8 +1,11 @@
 ﻿using Es.Riam.AbstractsOpen;
 using Es.Riam.Gnoss.AD.EntityModel;
+using Es.Riam.Gnoss.CL.ServiciosGenerales;
 using Es.Riam.Gnoss.Logica.ParametrosProyecto;
 using Es.Riam.Gnoss.Util.Configuracion;
 using Es.Riam.Gnoss.Util.General;
+using Microsoft.Extensions.Logging;
+using Serilog.Core;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -17,6 +20,8 @@ namespace Gnoss.Web.Services.VirtualPathProvider
         EntityContext _entityContext;
         ConfigService _configService;
         private IServicesUtilVirtuosoAndReplication _servicesUtilVirtuosoAndReplication;
+        private ILogger mlogger;
+        private ILoggerFactory mLoggerFactory;
         public static ConcurrentDictionary<string, string> ListaRutasVirtuales { get; } = new ConcurrentDictionary<string, string>();
         private static Dictionary<Guid, string> ListaHtmlsTemporales = new Dictionary<Guid, string>();
         private static List<string> ViewImports = new List<string>()
@@ -26,12 +31,14 @@ namespace Gnoss.Web.Services.VirtualPathProvider
             "@using Es.Riam.Gnoss.Web.MVC.Controles.Helper"
         };
 
-        public BDVirtualPath(EntityContext entityContext, LoggingService loggingService, ConfigService configService, IServicesUtilVirtuosoAndReplication servicesUtilVirtuosoAndReplication)
+        public BDVirtualPath(EntityContext entityContext, LoggingService loggingService, ConfigService configService, IServicesUtilVirtuosoAndReplication servicesUtilVirtuosoAndReplication, ILogger<BDVirtualPath> logger, ILoggerFactory loggerFactory)
         {
             _loggingService = loggingService;
             _entityContext = entityContext;
             _configService = configService;
             _servicesUtilVirtuosoAndReplication = servicesUtilVirtuosoAndReplication;
+            mlogger = logger;
+            mLoggerFactory = loggerFactory;
         }
 
         public string FindPage(string virtualPath)
@@ -79,7 +86,7 @@ namespace Gnoss.Web.Services.VirtualPathProvider
                                 tipoPagina += parametrosPagina[0];
                             }
 
-                            VistaVirtualCN vistaVirtualCN = new VistaVirtualCN(_entityContext, _loggingService, _configService, _servicesUtilVirtuosoAndReplication);
+                            VistaVirtualCN vistaVirtualCN = new VistaVirtualCN(_entityContext, _loggingService, _configService, _servicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<VistaVirtualCN>(), mLoggerFactory);
 
                             if (tipoPagina == "FichaRecurso")
                             {

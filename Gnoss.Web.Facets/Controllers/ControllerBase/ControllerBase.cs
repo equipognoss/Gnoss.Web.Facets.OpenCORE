@@ -11,6 +11,7 @@ using Es.Riam.Web.Util;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using static Es.Riam.Web.Util.UtilCookies;
@@ -28,8 +29,10 @@ namespace ServicioCargaFacetas
         protected IHttpContextAccessor mHttpContextAccessor;
         protected UtilWeb mUtilWeb;
         protected IServicesUtilVirtuosoAndReplication mServicesUtilVirtuosoAndReplication;
+        private ILogger mlogger;
+        private ILoggerFactory mLoggerFactory;
 
-        public ControllerBase(LoggingService loggingService, ConfigService configService, EntityContext entityContext, RedisCacheWrapper redisCacheWrapper, GnossCache gnossCache, VirtuosoAD virtuosoAD, IHttpContextAccessor httpContextAccessor, IServicesUtilVirtuosoAndReplication servicesUtilVirtuosoAndReplication)
+        public ControllerBase(LoggingService loggingService, ConfigService configService, EntityContext entityContext, RedisCacheWrapper redisCacheWrapper, GnossCache gnossCache, VirtuosoAD virtuosoAD, IHttpContextAccessor httpContextAccessor, IServicesUtilVirtuosoAndReplication servicesUtilVirtuosoAndReplication, ILogger<ControllerBase> logger, ILoggerFactory loggerFactory)
         {
             mLoggingService = loggingService;
             mVirtuosoAD = virtuosoAD;
@@ -40,6 +43,8 @@ namespace ServicioCargaFacetas
             mHttpContextAccessor = httpContextAccessor;
             mUtilWeb = new UtilWeb(mHttpContextAccessor);
             mServicesUtilVirtuosoAndReplication = servicesUtilVirtuosoAndReplication;
+            mlogger = logger;
+            mLoggerFactory = loggerFactory;
         }
 
         [NonAction]
@@ -150,7 +155,7 @@ namespace ServicioCargaFacetas
                         {
 
                             Guid usuarioID = new Guid(cookie["usuarioID"]);
-                            IdentidadCN identidadCN = new IdentidadCN(mEntityContext, mLoggingService, mConfigService, mServicesUtilVirtuosoAndReplication);
+                            IdentidadCN identidadCN = new IdentidadCN(mEntityContext, mLoggingService, mConfigService, mServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<IdentidadCN>(), mLoggerFactory);
                             Guid usuarioIDDeBD = identidadCN.ObtenerUsuarioIDConIdentidadID(identidadID);
                             if (!usuarioIDDeBD.Equals(usuarioID))
                             {

@@ -2,11 +2,14 @@
 using Es.Riam.AbstractsOpen;
 using Es.Riam.Gnoss.AD.EntityModel;
 using Es.Riam.Gnoss.CL;
+using Es.Riam.Gnoss.CL.ServiciosGenerales;
 using Es.Riam.Gnoss.Util.Configuracion;
 using Es.Riam.Gnoss.Util.General;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
+using Serilog.Core;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -18,12 +21,15 @@ namespace ServicioCargaFacetasMVC.Middlewares
         private IHostingEnvironment mEnv;
         private readonly RequestDelegate _next;
         private ConfigService mConfigService;
-
-        public GnossMiddleware(RequestDelegate next, IHostingEnvironment env, ConfigService configService)
+        private ILogger mlogger;
+        private ILoggerFactory mLoggerFactory;
+        public GnossMiddleware(RequestDelegate next, IHostingEnvironment env, ConfigService configService, ILogger<GnossMiddleware> logger, ILoggerFactory loggerFactory)
         {
             _next = next;
             mEnv = env;
             mConfigService = configService;
+            mlogger = logger;
+            mLoggerFactory = loggerFactory;
         }
 
         public async Task Invoke(HttpContext context, LoggingService loggingService, EntityContext entityContext, RedisCacheWrapper redisCacheWrapper)
@@ -46,7 +52,7 @@ namespace ServicioCargaFacetasMVC.Middlewares
         {
             if (pForzarComprobacion || LoggingService.HoraComprobacionCache == null || LoggingService.HoraComprobacionCache.AddSeconds(LoggingService.TiempoDuracionComprobacion) < DateTime.Now)
             {
-                GnossCacheCL gnossCacheCL = new GnossCacheCL(pEntityContext, pLoggingService, pRedisCacheWrapper, mConfigService, pServicesUtilVirtuosoAndReplication);
+                GnossCacheCL gnossCacheCL = new GnossCacheCL(pEntityContext, pLoggingService, pRedisCacheWrapper, mConfigService, pServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<GnossCacheCL>(), mLoggerFactory);
                 bool? trazaHabilitada = gnossCacheCL.ObtenerDeCache($"traza_5.0.0_{pHttpContext.Request.Host}") as bool?;
 
                 if (trazaHabilitada.HasValue && trazaHabilitada.Value)
