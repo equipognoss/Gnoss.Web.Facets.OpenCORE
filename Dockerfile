@@ -9,13 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl
 
 WORKDIR /app
 
-COPY Gnoss.Web.Facets/*.csproj ./
-
-RUN dotnet restore
-
 COPY . ./
 
-RUN dotnet publish Gnoss.Web.Facets/Gnoss.Web.Facets.csproj -c Release -o out
+RUN dotnet restore Gnoss.Web.Facets.OpenCORE/Gnoss.Web.Facets/Gnoss.Web.Facets.csproj
+
+RUN dotnet publish Gnoss.Web.Facets.OpenCORE/Gnoss.Web.Facets/Gnoss.Web.Facets.csproj -c Release -o out
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0
 
