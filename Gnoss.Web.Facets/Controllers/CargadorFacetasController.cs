@@ -1940,7 +1940,7 @@ namespace ServicioCargaFacetas
                 mFilaProyecto = null;
             }
             mLoggingService.AgregarEntrada("Acaba CargarFacetas");
-            GuardarTraza();
+            mLoggingService.GuardarTraza();
 
             FacetedModel resultadoFacetadoModel = new FacetedModel();
             resultadoFacetadoModel.FacetList = listaFacetas;
@@ -9786,28 +9786,6 @@ namespace ServicioCargaFacetas
                     LoggingService.TiempoMinPeticion = 0;
                 }
             }
-        }
-
-        private void GuardarTraza()
-        {
-            mLoggingService.GuardarTraza(ObtenerRutaTraza());
-        }
-
-        private string ObtenerRutaTraza()
-        {
-            string ruta = Path.Combine(mEnv.ContentRootPath, "trazas");
-            if (!string.IsNullOrEmpty(mControladorBase.DominoAplicacion))
-            {
-                ruta = Path.Combine(ruta, mControladorBase.DominoAplicacion);
-                if (!Directory.Exists(ruta))
-                {
-                    Directory.CreateDirectory(ruta);
-                }
-            }
-
-            ruta = Path.Combine(ruta, $"traza_{DateTime.Now.ToString("yyyy-MM-dd")}.txt");
-
-            return ruta;
         }
 
         #endregion
