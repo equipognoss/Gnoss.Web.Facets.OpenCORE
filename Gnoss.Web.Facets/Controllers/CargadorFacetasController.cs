@@ -434,7 +434,7 @@ namespace ServicioCargaFacetas
         public IActionResult ObtenerConsulta([FromForm] string pProyectoID, [FromForm] bool pEstaEnProyecto, [FromForm] bool pEsUsuarioInvitado, [FromForm] string pIdentidadID, [FromForm] string pParametros, [FromForm] string pUbicacionBusqueda, [FromForm] string pLanguageCode, [FromForm] bool pAdministradorVeTodasPersonas, [FromForm] short pTipoBusqueda, [FromForm] int? pNumeroFacetas, [FromForm] string pFaceta, [FromForm] string pGrafo, [FromForm] string pParametros_adiccionales, [FromForm] string pFiltroContexto, [FromForm] string pUrlPaginaActual, [FromForm] bool pUsarMasterParaLectura, [FromForm] bool? pJson, [FromForm] string tokenAfinidad, [FromForm] string pListaRecursosExcluidos)
         {
             ProyectoAD proyAD = new ProyectoAD(mLoggingService, mEntityContext, mConfigService, mServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<ProyectoAD>(), mLoggerFactory);
-            if (!proyAD.EsIdentidadAdministradorProyecto(new Guid(pIdentidadID), new Guid(pProyectoID), TipoRolUsuario.Administrador))
+            if (!proyAD.EsIdentidadAdministradorProyecto(new Guid(pIdentidadID), new Guid(pProyectoID)))
             {
                 return new EmptyResult();
             }
@@ -515,7 +515,10 @@ namespace ServicioCargaFacetas
 
                 pProyectoID = pProyectoID.Replace("\"", "");
                 pIdentidadID = pIdentidadID.Replace("\"", "");
-                pParametros = pParametros.Replace("\"", "");
+                if (pParametros.StartsWith('\"') && pParametros.EndsWith('\"'))
+                {
+                    pParametros = pParametros.Substring(1, pParametros.Length - 2);
+                }
                 pUbicacionBusqueda = pUbicacionBusqueda.Replace("\"", "");
                 pLanguageCode = pLanguageCode.Replace("\"", "");
                 pFaceta = pFaceta.Replace("\"", "");
@@ -1558,6 +1561,11 @@ namespace ServicioCargaFacetas
             }
             mFacetadoCL.FacetadoCN.FacetadoAD.ObtenerSoloConsulta = mObtenerSoloConsulta;
 
+            using (ParametroAplicacionCL parametroAplicacionCL = new ParametroAplicacionCL(mEntityContext, mLoggingService, mRedisCacheWrapper, mConfigService, mServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<ParametroAplicacionCL>(), mLoggerFactory))
+            {
+                mFacetadoCL.FacetadoCN.FacetadoAD.ListaIdiomas = parametroAplicacionCL.ObtenerListaIdiomas();
+            }
+
             if (mListaFiltros.ContainsKey("rdf:type"))
             {
                 GestorFacetas.CargarGestorFacetas(mListaFiltros["rdf:type"]);
@@ -2178,7 +2186,7 @@ namespace ServicioCargaFacetas
 
             ProyectoCN proyCN = new ProyectoCN(mEntityContext, mLoggingService, mConfigService, mServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<ProyectoCN>(), mLoggerFactory);
             // las personalizaciones no se cargan en la página de administración de miembros
-            if (!mAdministradorQuiereVerTodasLasPersonas || !mTipoBusqueda.Equals(TipoBusqueda.PersonasYOrganizaciones) || !proyCN.EsIdentidadAdministradorProyecto(mIdentidadID, pProyectoID, TipoRolUsuario.Administrador))
+            if (!mAdministradorQuiereVerTodasLasPersonas || !mTipoBusqueda.Equals(TipoBusqueda.PersonasYOrganizaciones) || !proyCN.EsIdentidadAdministradorProyecto(mIdentidadID, pProyectoID))
             {
                 VistaVirtualCL vistaVirtualCL = new VistaVirtualCL(mEntityContext, mLoggingService, mGnossCache, mRedisCacheWrapper, mConfigService, mServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<VistaVirtualCL>(), mLoggerFactory);
                 DataWrapperVistaVirtual vistaVirtualDW = vistaVirtualCL.ObtenerVistasVirtualPorProyectoID(pProyectoID, PersonalizacionEcosistemaID, ComunidadExcluidaPersonalizacionEcosistema);
