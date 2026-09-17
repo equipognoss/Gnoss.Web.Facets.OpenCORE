@@ -5,6 +5,7 @@ using Es.Riam.Gnoss.AD.EntityModel.Models.Faceta;
 using Es.Riam.Gnoss.AD.EntityModel.Models.ParametroGeneralDS;
 using Es.Riam.Gnoss.AD.Facetado;
 using Es.Riam.Gnoss.AD.Facetado.Model;
+using Es.Riam.Gnoss.AD.Identidad;
 using Es.Riam.Gnoss.AD.Parametro;
 using Es.Riam.Gnoss.AD.ParametroAplicacion;
 using Es.Riam.Gnoss.AD.ServiciosGenerales;
@@ -343,14 +344,14 @@ namespace ServicioCargaFacetas
 		private ICompositeViewEngine mViewEngine;
         private ControladorBase mControladorBase;
         private UtilServiciosFacetas mUtilServiciosFacetas;
-        private IHostingEnvironment mEnv;
+        private IWebHostEnvironment mEnv;
         private static object BLOQUEO_COMPROBACION_TRAZA = new object();
         private static DateTime HORA_COMPROBACION_TRAZA;
         private ILogger mlogger;
         private ILoggerFactory mLoggerFactory;
         #region Constructor
 
-        public CargadorFacetasController(EntityContext entityContext, LoggingService loggingService, RedisCacheWrapper redisCacheWrapper, ConfigService configService, VirtuosoAD virtuosoAD, GnossCache gnossCache, UtilServicios utilServicios, IHttpContextAccessor httpContextAccessor, ICompositeViewEngine viewEngine, IHostingEnvironment env, IServicesUtilVirtuosoAndReplication servicesUtilVirtuosoAndReplication, IAvailableServices availableServices, ILogger<CargadorFacetasController> logger, ILoggerFactory loggerFactory)
+        public CargadorFacetasController(EntityContext entityContext, LoggingService loggingService, RedisCacheWrapper redisCacheWrapper, ConfigService configService, VirtuosoAD virtuosoAD, GnossCache gnossCache, UtilServicios utilServicios, IHttpContextAccessor httpContextAccessor, ICompositeViewEngine viewEngine, IWebHostEnvironment env, IServicesUtilVirtuosoAndReplication servicesUtilVirtuosoAndReplication, IAvailableServices availableServices, ILogger<CargadorFacetasController> logger, ILoggerFactory loggerFactory)
             : base(loggingService, configService, entityContext, redisCacheWrapper, gnossCache, virtuosoAD, httpContextAccessor, servicesUtilVirtuosoAndReplication, logger, loggerFactory)
         {
             mEntityContext = entityContext;
@@ -377,18 +378,52 @@ namespace ServicioCargaFacetas
         #region Metodos Web
         [HttpGet, HttpPost]
         [Route("LimpiarCache")]
-        public ActionResult LimpiarCache()
+        public ActionResult LimpiarCache([FromForm] string pIdentidadID, [FromForm] string pProyectoID)
         {
-            VistaVirtualCL vistaVirtualCL = new VistaVirtualCL(mEntityContext, mLoggingService, mGnossCache, mRedisCacheWrapper, mConfigService, mServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<VistaVirtualCL>(), mLoggerFactory);
-            vistaVirtualCL.InvalidarVistasVirtualesEcosistemaEnCacheLocal();
-            return View();
+            if (!Guid.TryParse(pIdentidadID, out Guid identidadID) || !Guid.TryParse(pProyectoID, out Guid proyectoID))
+            {
+                return new EmptyResult();
+            }
+
+            try
+            {
+                using ProyectoAD proyAD = new ProyectoAD(mLoggingService, mEntityContext, mConfigService, mServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<ProyectoAD>(), mLoggerFactory);
+                if (!proyAD.EsIdentidadAdministradorProyecto(identidadID, proyectoID))
+                {
+                    return new EmptyResult();
+                }
+                using VistaVirtualCL vistaVirtualCL = new VistaVirtualCL(mEntityContext, mLoggingService, mGnossCache, mRedisCacheWrapper, mConfigService, mServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<VistaVirtualCL>(), mLoggerFactory);
+                vistaVirtualCL.InvalidarVistasVirtualesEcosistemaEnCacheLocal();
+                return View();
+            }
+            catch (Exception ex)
+            {
+                mLoggingService.GuardarLogError(ex, mlogger);
+                return new EmptyResult();
+            }
         }
 
         [HttpGet, HttpPost]
         [Route("InvalidarCacheLocal")]
-        public void InvalidarCacheLocal([FromForm] string pProyectoID)
+        public void InvalidarCacheLocal([FromForm] string pProyectoID, [FromForm] string pIdentidadID)
         {
-            mGnossCache.VersionarCacheLocal(new Guid(pProyectoID));
+            if (!Guid.TryParse(pIdentidadID, out Guid identidadID) || !Guid.TryParse(pProyectoID, out Guid proyectoID))
+            {
+                return;
+            }
+
+            try
+            {
+                using ProyectoAD proyAD = new ProyectoAD(mLoggingService, mEntityContext, mConfigService, mServicesUtilVirtuosoAndReplication, mLoggerFactory.CreateLogger<ProyectoAD>(), mLoggerFactory);
+                if (proyAD.EsIdentidadAdministradorProyecto(identidadID, proyectoID))
+                {
+                    mGnossCache.VersionarCacheLocal(proyectoID);
+                }
+            }
+            catch (Exception ex)
+            {
+                mLoggingService.GuardarLogError(ex, mlogger);
+            }
         }
 
         [NonAction]
@@ -944,7 +979,7 @@ namespace ServicioCargaFacetas
             JsonSerializerSettings jsonSerializerSettingsVB = new JsonSerializerSettings
             {
                 TypeNameHandling = TypeNameHandling.All,
-                TypeNameAssemblyFormat = System.Runtime.Serialization.Formatters.FormatterAssemblyStyle.Full
+                TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Full
             };
             Dictionary<string, object> dic = ViewData.Where(k => !k.Key.Equals("LoggingService")).ToDictionary(k => k.Key, v => v.Value);
             string jsonViewData = JsonConvert.SerializeObject(dic, jsonSerializerSettingsVB);

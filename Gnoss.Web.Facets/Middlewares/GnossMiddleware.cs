@@ -18,12 +18,12 @@ namespace ServicioCargaFacetasMVC.Middlewares
 {
     public class GnossMiddleware
     {
-        private IHostingEnvironment mEnv;
+        private IWebHostEnvironment mEnv;
         private readonly RequestDelegate _next;
         private ConfigService mConfigService;
         private ILogger mlogger;
         private ILoggerFactory mLoggerFactory;
-        public GnossMiddleware(RequestDelegate next, IHostingEnvironment env, ConfigService configService, ILogger<GnossMiddleware> logger, ILoggerFactory loggerFactory)
+        public GnossMiddleware(RequestDelegate next, IWebHostEnvironment env, ConfigService configService, ILogger<GnossMiddleware> logger, ILoggerFactory loggerFactory)
         {
             _next = next;
             mEnv = env;
