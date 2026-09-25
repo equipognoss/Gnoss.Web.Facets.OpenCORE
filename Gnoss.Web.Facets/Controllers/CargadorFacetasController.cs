@@ -1332,7 +1332,7 @@ namespace ServicioCargaFacetas
 
             #region FiltroIdiomaActual
 
-            if (ParametroProyecto.ContainsKey(ParametroAD.PropiedadContenidoMultiIdioma))
+            if (ParametroProyecto.ContainsKey(ParametroAD.PropiedadContenidoMultiIdioma) && mTipoBusqueda != TipoBusqueda.Contactos && mTipoBusqueda != TipoBusqueda.PersonasYOrganizaciones)
             {
                 List<string> listaIdiomas = new List<string>();
                 listaIdiomas.Add(pLanguageCode);
