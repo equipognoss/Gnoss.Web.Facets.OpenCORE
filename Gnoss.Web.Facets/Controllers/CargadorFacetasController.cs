@@ -3824,9 +3824,9 @@ namespace ServicioCargaFacetas
                             listObjetosConocimiento[facetaPestanya.ObjetoConocimiento.ToLower()].Add(facetaPestanya.Faceta);
                         }
 
-                        List<FacetaObjetoConocimiento> listaFacetaObjetoConocimiento = GestorFacetas.FacetasDW.ListaFacetaObjetoConocimiento.Where(item => !listObjetosConocimiento.Keys.Contains(item.ObjetoConocimiento.ToLower()) || !listObjetosConocimiento[item.ObjetoConocimiento].Contains(item.Faceta)).ToList();
+                        List<FacetaObjetoConocimiento> listaFacetaObjetoConocimiento = GestorFacetas.FacetasDW.ListaFacetaObjetoConocimiento.Where(item => !listObjetosConocimiento.Keys.Contains(item.ObjetoConocimiento.ToLower()) || !listObjetosConocimiento[item.ObjetoConocimiento.ToLower()].Contains(item.Faceta)).ToList();
                         List<FacetaObjetoConocimientoProyecto> listaFacetaObjetoConocimientoProyectoBorrar = GestorFacetas.FacetasDW.ListaFacetaObjetoConocimientoProyecto.Where(item => !listObjetosConocimiento.Keys.Contains(item.ObjetoConocimiento.ToLower()) || !listObjetosConocimiento[item.ObjetoConocimiento.ToLower()].Contains(item.Faceta)).ToList();
-                        List<FacetaFiltroProyecto> listaFacetaFiltroProyectoBorrar = GestorFacetas.FacetasDW.ListaFacetaFiltroProyecto.Where(item => !listObjetosConocimiento.Keys.Contains(item.ObjetoConocimiento) || !listObjetosConocimiento[item.ObjetoConocimiento].Contains(item.Faceta)).ToList();
+                        List<FacetaFiltroProyecto> listaFacetaFiltroProyectoBorrar = GestorFacetas.FacetasDW.ListaFacetaFiltroProyecto.Where(item => !listObjetosConocimiento.Keys.Contains(item.ObjetoConocimiento.ToLower()) || !listObjetosConocimiento[item.ObjetoConocimiento.ToLower()].Contains(item.Faceta)).ToList();
 
 
                         foreach (FacetaObjetoConocimiento filaObjConProy in listaFacetaObjetoConocimiento)
